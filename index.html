@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Feedlot — cabezas por corral</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --suelo: #1a1512;
+    --suelo-panel: #241d18;
+    --suelo-borde: #3a2f27;
+    --trigo: #d4a73d;
+    --trigo-tenue: #8a752f;
+    --pasto: #7a8b6f;
+    --oxido: #a6543a;
+    --texto: #ede6da;
+    --texto-tenue: #a89a87;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--suelo);
+    color:var(--texto);
+    font-family:'Work Sans',sans-serif;
+    min-height:100vh;
+    padding:32px 20px 60px;
+  }
+  .marco{
+    max-width:960px;
+    margin:0 auto;
+  }
+  .encabezado{
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+    flex-wrap:wrap;
+    gap:8px;
+    border-bottom:1px solid var(--suelo-borde);
+    padding-bottom:18px;
+    margin-bottom:36px;
+  }
+  .encabezado h1{
+    font-family:'Work Sans',sans-serif;
+    font-weight:600;
+    font-size:15px;
+    letter-spacing:0.02em;
+    color:var(--texto-tenue);
+    margin:0;
+  }
+  .encabezado .reloj{
+    font-size:13px;
+    color:var(--texto-tenue);
+  }
+  .hero{
+    text-align:center;
+    padding:28px 0 44px;
+  }
+  .hero .etiqueta{
+    font-size:14px;
+    color:var(--pasto);
+    margin-bottom:6px;
+  }
+  .hero .total{
+    font-family:'Roboto Slab',serif;
+    font-weight:700;
+    font-size:clamp(64px, 16vw, 128px);
+    line-height:1;
+    color:var(--trigo);
+    letter-spacing:-0.01em;
+    transition:opacity 0.4s ease;
+  }
+  .hero .subtitulo{
+    font-size:15px;
+    color:var(--texto-tenue);
+    margin-top:10px;
+  }
+  .grilla{
+    display:grid;
+    grid-template-columns:repeat(auto-fill, minmax(200px, 1fr));
+    gap:2px;
+    background:var(--suelo-borde);
+    border:1px solid var(--suelo-borde);
+  }
+  .corral{
+    background:var(--suelo-panel);
+    padding:20px 18px;
+    border-left:3px solid var(--pasto);
+    transition:opacity 0.3s ease;
+  }
+  .corral.viejo{ border-left-color:var(--oxido); }
+  .corral .nombre{
+    font-size:14px;
+    color:var(--texto-tenue);
+    margin-bottom:8px;
+  }
+  .corral .cantidad{
+    font-family:'Roboto Slab',serif;
+    font-weight:700;
+    font-size:38px;
+    color:var(--texto);
+    line-height:1;
+  }
+  .corral .cantidad .unidad{
+    font-family:'Work Sans',sans-serif;
+    font-weight:400;
+    font-size:14px;
+    color:var(--texto-tenue);
+    margin-left:6px;
+  }
+  .corral .actualizado{
+    font-size:12px;
+    color:var(--texto-tenue);
+    margin-top:10px;
+  }
+  .corral .actualizado.viejo-txt{ color:var(--oxido); }
+  .corral .origen-manual{
+    display:inline-block;
+    font-size:11px;
+    color:var(--trigo-tenue);
+    margin-left:6px;
+  }
+  .estado{
+    text-align:center;
+    padding:60px 20px;
+    color:var(--texto-tenue);
+    font-size:15px;
+  }
+  .estado .oxido{ color:var(--oxido); }
+  .pie{
+    text-align:center;
+    margin-top:40px;
+    font-size:12px;
+    color:var(--texto-tenue);
+  }
+  @media (max-width:480px){
+    .encabezado{flex-direction:column; align-items:flex-start;}
+  }
+</style>
+</head>
+<body>
+  <div class="marco">
+    <div class="encabezado">
+      <h1>Feedlot — conteo por corral</h1>
+      <div class="reloj" id="reloj">—</div>
+    </div>
+
+    <div class="hero">
+      <div class="etiqueta">Total en el feedlot</div>
+      <div class="total" id="total">—</div>
+      <div class="subtitulo" id="subtitulo-total">cargando datos…</div>
+    </div>
+
+    <div id="contenido"></div>
+  </div>
+
+  <div class="pie">Se actualiza solo cada 60 segundos. También podés recargar la página.</div>
+
+<script>
+// ============================================================
+// CONFIG — lo único que deberías necesitar tocar
+// ============================================================
+const PROJECT_ID = "vacas-app-34468";
+const COLLECTION = "corrales_estado";
+const REFRESH_MS = 60000; // 60 segundos
+const HORAS_PARA_CONSIDERAR_VIEJO = 48; // más de 48hs sin actualizar = destacado en color óxido
+
+// ============================================================
+// Parseo de valores tipados de Firestore REST -> JS plano
+// ============================================================
+function valorFirestore(v) {
+  if (v == null) return null;
+  if ("stringValue" in v) return v.stringValue;
+  if ("integerValue" in v) return parseInt(v.integerValue, 10);
+  if ("doubleValue" in v) return v.doubleValue;
+  if ("booleanValue" in v) return v.booleanValue;
+  if ("timestampValue" in v) return v.timestampValue;
+  if ("nullValue" in v) return null;
+  if ("mapValue" in v) return camposFirestore(v.mapValue.fields || {});
+  if ("arrayValue" in v) return (v.arrayValue.values || []).map(valorFirestore);
+  return null;
+}
+function camposFirestore(fields) {
+  const out = {};
+  for (const k in fields) out[k] = valorFirestore(fields[k]);
+  return out;
+}
+
+function tiempoRelativo(iso) {
+  if (!iso) return "sin fecha";
+  const ahora = new Date();
+  const fecha = new Date(iso);
+  const seg = Math.floor((ahora - fecha) / 1000);
+  if (seg < 60) return "hace instantes";
+  const min = Math.floor(seg / 60);
+  if (min < 60) return `hace ${min} min`;
+  const hs = Math.floor(min / 60);
+  if (hs < 24) return `hace ${hs} h`;
+  const dias = Math.floor(hs / 24);
+  return `hace ${dias} día${dias === 1 ? "" : "s"}`;
+}
+function horasDesde(iso) {
+  if (!iso) return Infinity;
+  return (new Date() - new Date(iso)) / 3600000;
+}
+
+// Orden natural: "Corral 2" antes que "Corral 10"
+function compararNombres(a, b) {
+  return a.nombre.localeCompare(b.nombre, "es", { numeric: true, sensitivity: "base" });
+}
+
+// ============================================================
+// Fetch + render
+// ============================================================
+async function cargarCorrales() {
+  const cont = document.getElementById("contenido");
+  try {
+    const url = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/${COLLECTION}`;
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    const docs = data.documents || [];
+
+    const corrales = docs.map(d => {
+      const campos = camposFirestore(d.fields || {});
+      return {
+        nombre: campos.nombre || d.name.split("/").pop(),
+        cantidad: typeof campos.cantidadActual === "number" ? campos.cantidadActual : null,
+        actualizado: campos.ultimaActualizacion || null,
+        origen: campos.origen || "drone",
+      };
+    }).sort(compararNombres);
+
+    if (corrales.length === 0) {
+      cont.innerHTML = `<div class="estado">Todavía no hay ningún corral contado.</div>`;
+      document.getElementById("total").textContent = "—";
+      document.getElementById("subtitulo-total").textContent = "esperando el primer conteo";
+      return;
+    }
+
+    const total = corrales.reduce((s, c) => s + (c.cantidad || 0), 0);
+    document.getElementById("total").style.opacity = "0.3";
+    setTimeout(() => {
+      document.getElementById("total").textContent = total.toLocaleString("es-AR");
+      document.getElementById("total").style.opacity = "1";
+    }, 150);
+    document.getElementById("subtitulo-total").textContent =
+      `${corrales.length} corral${corrales.length === 1 ? "" : "es"} con datos`;
+
+    cont.innerHTML = `<div class="grilla">${corrales.map(c => {
+      const viejo = horasDesde(c.actualizado) > HORAS_PARA_CONSIDERAR_VIEJO;
+      return `
+        <div class="corral ${viejo ? "viejo" : ""}">
+          <div class="nombre">${c.nombre}</div>
+          <div class="cantidad">${c.cantidad != null ? c.cantidad : "—"}<span class="unidad">cabezas</span></div>
+          <div class="actualizado ${viejo ? "viejo-txt" : ""}">
+            ${tiempoRelativo(c.actualizado)}
+            ${c.origen === "manual" ? '<span class="origen-manual">· manual</span>' : ""}
+          </div>
+        </div>`;
+    }).join("")}</div>`;
+
+  } catch (e) {
+    cont.innerHTML = `<div class="estado">No se pudo conectar en este momento.<br><span class="oxido">${e.message}</span><br>Probá recargar la página en unos segundos.</div>`;
+  }
+  document.getElementById("reloj").textContent = "actualizado " + new Date().toLocaleTimeString("es-AR");
+}
+
+cargarCorrales();
+setInterval(cargarCorrales, REFRESH_MS);
+</script>
+</body>
+</html>
