@@ -27,7 +27,7 @@ jobs:
       contents: write # para registrar la corrida (paso final)
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Ping Supabase (keep-alive)
         run: |
@@ -108,6 +108,7 @@ jobs:
                              headers={**H, "Content-Type": "application/json"},
                              json=body, timeout=30)
           print("backup:", r.status_code, f"{len(conteos)} corrales")
+          r.raise_for_status() # si deniega (rules), que el run salga rojo
 
           lst = requests.get(f"{base}/feedlots/{feed}/backups?pageSize=100",
                              headers=H, timeout=30).json()
