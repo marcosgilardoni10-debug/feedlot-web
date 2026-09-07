@@ -23,7 +23,12 @@ on:
 jobs:
   mantener:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # para registrar la corrida (paso final)
     steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
       - name: Ping Supabase (keep-alive)
         run: |
           FECHA=$(date -u +%FT%TZ)
@@ -56,8 +61,10 @@ jobs:
               json={"returnSecureToken": True}, timeout=30).json()["idToken"]
           H = {"Authorization": f"Bearer {tok}"}
 
-          col = requests.get(f"{base}/feedlots/{feed}/corrales_estado?pageSize=100",
-                             headers=H, timeout=30).json()
+          col_r = requests.get(f"{base}/feedlots/{feed}/corrales_estado?pageSize=100",
+                              headers=H, timeout=30)
+          col_r.raise_for_status() # si falla la lectura, que el run salga rojo
+          col = col_r.json()
 
           def pv(v):
               if "integerValue" in v:
@@ -111,3 +118,12 @@ jobs:
               print("podado", viejo)
           print("OK")
           EOF
+
+      - name: Registrar corrida (rearma los 60 días de GitHub)
+        run: |
+          date -u +%FT%TZ > .github/last-run.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .github/last-run.txt
+          git diff --cached --quiet || git commit -m "keepalive $(date -u +%F)"
+          git push
