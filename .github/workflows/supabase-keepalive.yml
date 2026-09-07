@@ -40,7 +40,8 @@ jobs:
           FIREBASE_APIKEY: ${{ secrets.FIREBASE_APIKEY }}
           FIREBASE_PROJECT: ${{ secrets.FIREBASE_PROJECT }}
           FEEDLOT_ID: la-fortuna
-        run: python3 - <<'EOF'
+        run: |
+          python3 - <<'EOF'
           import datetime
           import os
           import requests
