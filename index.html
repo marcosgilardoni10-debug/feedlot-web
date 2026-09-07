@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mapa del Feedlot — Vacas en vivo</title>
+<style>
+  :root {
+    --fondo: #080a0a;
+    --panel: #0f1414;
+    --tarjeta: #141a1a;
+    --borde: rgba(255,255,255,.09);
+    --texto: #e8ecec;
+    --gris: #8a9494;
+    --acento: #2dd4bf;
+    --celeste: #4fc3f7;
+    --rojo: #ff5252;
+    --amarillo: #ffd54f;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--fondo);
+    color: var(--texto);
+    font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    min-height: 100vh;
+  }
+  header {
+    background: var(--panel);
+    border-bottom: 1px solid var(--borde);
+    padding: 14px 18px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  .encabezado { max-width: 1100px; margin: 0 auto; }
+  h1 { font-size: 19px; letter-spacing: .6px; font-weight: 800; }
+  h1 small { display: block; font-size: 11px; color: var(--gris); font-weight: 500; margin-top: 2px; }
+  .fila-total {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    margin-top: 12px;
+  }
+  .total {
+    display: flex; align-items: center; gap: 12px;
+    background: rgba(45,212,191,.10);
+    border: 1px solid rgba(45,212,191,.25);
+    border-radius: 14px;
+    padding: 10px 20px 10px 14px;
+  }
+  .total .num { font-size: 34px; font-weight: 800; color: var(--acento); line-height: 1; }
+  .total .rotulo { font-size: 10px; letter-spacing: 1.2px; color: var(--gris); font-weight: 700; }
+  .estado { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--gris); }
+  .punto { width: 9px; height: 9px; border-radius: 50%; background: var(--acento); box-shadow: 0 0 6px var(--acento); }
+  .punto.off { background: var(--amarillo); box-shadow: 0 0 6px var(--amarillo); }
+  button.recargar {
+    margin-left: auto;
+    background: rgba(255,255,255,.07);
+    color: var(--texto);
+    border: 1px solid var(--borde);
+    border-radius: 10px;
+    padding: 9px 14px;
+    font-size: 13px; font-weight: 700;
+    cursor: pointer;
+  }
+  button.recargar:active { transform: scale(.97); }
+  main { max-width: 1100px; margin: 0 auto; padding: 16px 18px 40px; }
+  .aviso {
+    display: none;
+    background: rgba(255,213,79,.10);
+    border: 1px solid rgba(255,213,79,.35);
+    color: var(--amarillo);
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 13px;
+    margin-bottom: 12px;
+  }
+  .aviso.visible { display: block; }
+  .mapa-caja {
+    background: var(--panel);
+    border: 1px solid var(--borde);
+    border-radius: 16px;
+    overflow: hidden;
+  }
+  svg#mapa { display: block; width: 100%; height: auto; background: #050505; }
+  h2 {
+    font-size: 12px; letter-spacing: 1.5px; color: var(--gris);
+    margin: 22px 0 10px; font-weight: 800;
+  }
+  .grilla {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 10px;
+  }
+  .corral {
+    background: var(--tarjeta);
+    border: 1px solid var(--borde);
+    border-radius: 12px;
+    padding: 10px 12px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .corral .n { font-size: 24px; font-weight: 800; min-width: 52px; text-align: right; }
+  .corral .datos { display: flex; flex-direction: column; gap: 2px; }
+  .corral .nombre { font-size: 13px; font-weight: 700; }
+  .corral .origen { font-size: 10px; color: var(--gris); }
+  .corral.vacio { opacity: .55; }
+  .corral.vacio .n { color: var(--gris); font-size: 20px; }
+  .pie { text-align: center; color: var(--gris); font-size: 11px; margin-top: 26px; }
+  @media (max-width: 600px) {
+    .total .num { font-size: 28px; }
+    .grilla { grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="encabezado">
+    <h1>🐄 MAPA DEL FEEDLOT<small>Conteo en vivo — se actualiza solo cada 1 minuto</small></h1>
+    <div class="fila-total">
+      <div class="total">
+        <div>
+          <div class="rotulo">TOTAL VACAS</div>
+          <div class="num" id="total">—</div>
+        </div>
+      </div>
+      <div class="estado"><span class="punto" id="punto"></span><span id="estado">Conectando…</span></div>
+      <button class="recargar" id="btn-recargar" type="button">↻ Actualizar ahora</button>
+    </div>
+  </div>
+</header>
+<main>
+  <div class="aviso" id="aviso"></div>
+  <div class="mapa-caja"><svg id="mapa" role="img" aria-label="Mapa de corrales"></svg></div>
+  <h2>CORRALES (<span id="n-corrales">—</span>)</h2>
+  <div class="grilla" id="grilla"></div>
+  <div class="pie">Los números los escribe la app de conteo (drone o carga manual).</div>
+</main>
+
+<script src="config-data.js"></script>
+<script>
+(function () {
+  "use strict";
+  var POLL_MS = 60000; // 1 minuto
+  var aviso = document.getElementById("aviso");
+  var elTotal = document.getElementById("total");
+  var elEstado = document.getElementById("estado");
+  var elPunto = document.getElementById("punto");
+  var elGrilla = document.getElementById("grilla");
+  var elN = document.getElementById("n-corrales");
+  var svg = document.getElementById("mapa");
+
+  function mostrarAviso(msg) {
+    if (!msg) { aviso.classList.remove("visible"); aviso.textContent = ""; return; }
+    aviso.textContent = msg;
+    aviso.classList.add("visible");
+  }
+
+  if (typeof FIREBASE_CONFIG === "undefined" || typeof CORRALES === "undefined" || typeof IMG === "undefined") {
+    mostrarAviso("Falta el archivo config-data.js al lado de este index.html.");
+    return;
+  }
+  var APIKEY = FIREBASE_CONFIG.apiKey;
+  var PROJECT = FIREBASE_CONFIG.projectId;
+
+  // ---------- Plano del SVG = píxeles de la foto aérea (igual que la app) ----------
+  var NS = "http://www.w3.org/2000/svg";
+  svg.setAttribute("viewBox", "0 0 " + IMG.w + " " + IMG.h);
+  var foto = document.createElementNS(NS, "image");
+  foto.setAttribute("href", IMG.src);
+  foto.setAttribute("x", "0");
+  foto.setAttribute("y", "0");
+  foto.setAttribute("width", IMG.w);
+  foto.setAttribute("height", IMG.h);
+  svg.appendChild(foto);
+
+  function centroide(pp) {
+    var sx = 0, sy = 0, i;
+    for (i = 0; i < pp.length; i++) { sx += pp[i][0]; sy += pp[i][1]; }
+    return [sx / pp.length, sy / pp.length];
+  }
+
+  // ---------- Dibuja polígonos una vez; etiquetas se actualizan ----------
+  var etiquetas = {}; // nombre -> {num, nombre}
+  CORRALES.forEach(function (c) {
+    var pp = c.pts;
+    var pts = pp.map(function (q) { return q[0].toFixed(1) + "," + q[1].toFixed(1); }).join(" ");
+    var pol = document.createElementNS(NS, "polygon");
+    pol.setAttribute("points", pts);
+    pol.setAttribute("fill", "rgba(79,195,247,.20)");
+    pol.setAttribute("stroke", "#4fc3f7");
+    pol.setAttribute("stroke-width", "3");
+    pol.setAttribute("stroke-linejoin", "round");
+    svg.appendChild(pol);
+
+    var xs = pp.map(function (q) { return q[0]; });
+    var ys = pp.map(function (q) { return q[1]; });
+    var bw = Math.max(1, Math.max.apply(null, xs) - Math.min.apply(null, xs));
+    var bh = Math.max(1, Math.max.apply(null, ys) - Math.min.apply(null, ys));
+    var cen = centroide(pp);
+
+    var g = document.createElementNS(NS, "g");
+    var fondo = document.createElementNS(NS, "rect");
+    var tNum = document.createElementNS(NS, "text");
+    tNum.setAttribute("text-anchor", "middle");
+    tNum.setAttribute("fill", "#ffffff");
+    tNum.setAttribute("font-weight", "900");
+    var tNom = document.createElementNS(NS, "text");
+    tNom.setAttribute("text-anchor", "middle");
+    tNom.setAttribute("fill", "rgba(255,255,255,.7)");
+    tNom.setAttribute("font-weight", "700");
+    tNom.textContent = c.nombre;
+    g.appendChild(fondo); g.appendChild(tNum); g.appendChild(tNom);
+    svg.appendChild(g);
+    etiquetas[c.nombre] = { g: g, fondo: fondo, tNum: tNum, tNom: tNom, cx: cen[0], cy: cen[1], bw: bw, bh: bh };
+  });
+
+  function dibujarEtiqueta(e, texto, nombre) {
+    var dig = Math.max(String(texto).length, 2);
+    var fs = Math.min(34, e.bw / (0.62 * dig), e.bh * 0.55);
+    fs = Math.max(10, Math.min(34, fs));
+    var conNombre = e.bw >= 70 && e.bh >= 52;
+    var fsNom = 11;
+    var anchoTxt = Math.max(dig * 0.60 * fs, conNombre ? nombre.length * 0.58 * fsNom : 0);
+    var padH = Math.min(12, Math.max(6, fs * 0.45));
+    var padV = Math.min(7, Math.max(4, fs * 0.28));
+    var w = anchoTxt + padH * 2;
+    var h = fs + (conNombre ? 4 + fsNom : 0) + padV * 2;
+    e.fondo.setAttribute("x", (e.cx - w / 2).toFixed(1));
+    e.fondo.setAttribute("y", (e.cy - h / 2).toFixed(1));
+    e.fondo.setAttribute("width", w.toFixed(1));
+    e.fondo.setAttribute("height", h.toFixed(1));
+    e.fondo.setAttribute("rx", "9");
+    e.fondo.setAttribute("fill", "rgba(0,0,0,.82)");
+    e.fondo.setAttribute("stroke", "#4fc3f7");
+    e.fondo.setAttribute("stroke-width", "1.4");
+    e.tNum.setAttribute("x", e.cx.toFixed(1));
+    e.tNum.setAttribute("y", (e.cy - h / 2 + padV + fs * 0.82).toFixed(1));
+    e.tNum.setAttribute("font-size", fs.toFixed(1));
+    e.tNum.textContent = texto;
+    if (conNombre) {
+      e.tNom.setAttribute("x", e.cx.toFixed(1));
+      e.tNom.setAttribute("y", (e.cy - h / 2 + padV + fs + 4 + fsNom * 0.82).toFixed(1));
+      e.tNom.setAttribute("font-size", fsNom);
+      e.tNom.style.display = "";
+    } else {
+      e.tNom.style.display = "none";
+    }
+  }
+
+  // ---------- Tarjetas por corral ----------
+  function ordenCorral(a, b) {
+    function num(n) { var m = /(\d+)/.exec(n); return m ? parseInt(m[1], 10) : 1e9; }
+    return num(a.nombre) - num(b.nombre) || (a.nombre < b.nombre ? -1 : 1);
+  }
+  var ordenados = CORRALES.slice().sort(ordenCorral);
+  elN.textContent = ordenados.length;
+  var tarjetas = {};
+  ordenados.forEach(function (c) {
+    var d = document.createElement("div");
+    d.className = "corral vacio";
+    d.innerHTML = '<div class="n">—</div><div class="datos"><div class="nombre"></div><div class="origen">sin datos</div></div>';
+    d.querySelector(".nombre").textContent = c.nombre;
+    elGrilla.appendChild(d);
+    tarjetas[c.nombre] = d;
+  });
+
+  // ---------- Auth anónima (igual que la app) + lectura Firestore ----------
+  var tokenCache = null; // {token, vence}
+  function guardarRefresh(r) { try { localStorage.setItem("vacas_refresh", r); } catch (e) {} }
+  function leerRefresh() { try { return localStorage.getItem("vacas_refresh"); } catch (e) { return null; } }
+
+  function pedirIdToken() {
+    if (tokenCache && Date.now() < tokenCache.vence - 60000) {
+      return Promise.resolve(tokenCache.token);
+    }
+    var refresco = leerRefresh();
+    var promesa;
+    if (refresco) {
+      promesa = fetch("https://securetoken.googleapis.com/v1/token?key=" + APIKEY, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ grant_type: "refresh_token", refresh_token: refresco })
+      }).then(function (r) {
+        if (!r.ok) throw new Error("refresh");
+        return r.json();
+      }).then(function (j) {
+        guardarRefresh(j.refresh_token);
+        return { token: j.id_token, seg: parseInt(j.expires_in || "3600", 10) };
+      }).catch(function () { return firmarAnonimo(); });
+    } else {
+      promesa = firmarAnonimo();
+    }
+    return promesa.then(function (t) {
+      tokenCache = { token: t.token, vence: Date.now() + t.seg * 1000 };
+      return t.token;
+    });
+  }
+
+  function firmarAnonimo() {
+    return fetch("https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=" + APIKEY, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ returnSecureToken: true })
+    }).then(function (r) {
+      if (!r.ok) throw new Error("No se pudo autenticar (HTTP " + r.status + ")");
+      return r.json();
+    }).then(function (j) {
+      guardarRefresh(j.refreshToken);
+      return { token: j.idToken, seg: parseInt(j.expiresIn || "3600", 10) };
+    });
+  }
+
+  function valorCampo(v) {
+    if (!v) return null;
+    if ("stringValue" in v) return v.stringValue;
+    if ("integerValue" in v) return parseInt(v.integerValue, 10);
+    if ("doubleValue" in v) return v.doubleValue;
+    if ("timestampValue" in v) return v.timestampValue;
+    return null;
+  }
+
+  function leerConteos(token, reintento) {
+    var url = "https://firestore.googleapis.com/v1/projects/" + PROJECT +
+      "/databases/(default)/documents/corrales_estado?pageSize=100";
+    return fetch(url, { headers: { "Authorization": "Bearer " + token } }).then(function (r) {
+      if (r.status === 401 && !reintento) {
+        tokenCache = null;
+        try { localStorage.removeItem("vacas_refresh"); } catch (e) {}
+        return pedirIdToken().then(function (t2) { return leerConteos(t2, true); });
+      }
+      if (!r.ok) throw new Error("Firestore HTTP " + r.status);
+      return r.json();
+    }).then(function (j) {
+      var mapa = {};
+      (j.documents || []).forEach(function (d) {
+        var f = d.fields || {};
+        var nombre = valorCampo(f.nombre);
+        var cant = valorCampo(f.cantidadActual);
+        if (!nombre || cant === null || isNaN(cant)) return;
+        mapa[nombre] = {
+          n: cant,
+          origen: valorCampo(f.origen) || "drone",
+          ts: valorCampo(f.ultimaActualizacion)
+        };
+      });
+      return mapa;
+    });
+  }
+
+  // ---------- Estado + polling ----------
+  var ultimoOk = null;
+  var ultimaError = null;
+
+  try {
+    var cache = JSON.parse(localStorage.getItem("vacas_counts") || "null");
+    if (cache && cache.mapa) { renderizar(cache.mapa, true); }
+  } catch (e) {}
+
+  function renderizar(mapa, esCache) {
+    var total = 0, conDatos = 0;
+    ordenados.forEach(function (c) {
+      var dato = mapa[c.nombre];
+      var e = etiquetas[c.nombre];
+      var t = tarjetas[c.nombre];
+      if (dato) {
+        total += dato.n; conDatos++;
+        dibujarEtiqueta(e, String(dato.n), c.nombre);
+        t.classList.remove("vacio");
+        t.querySelector(".n").textContent = dato.n;
+        t.querySelector(".origen").textContent =
+          (dato.origen === "manual" ? "✏️ carga manual" : "🚁 drone") +
+          (dato.ts ? " • " + fechaCorta(dato.ts) : "");
+      } else {
+        dibujarEtiqueta(e, "—", c.nombre);
+        t.classList.add("vacio");
+        t.querySelector(".n").textContent = "—";
+        t.querySelector(".origen").textContent = "sin datos";
+      }
+    });
+    elTotal.textContent = conDatos ? total : "—";
+    try { localStorage.setItem("vacas_counts", JSON.stringify({ ts: Date.now(), mapa: mapa })); } catch (e) {}
+  }
+
+  function fechaCorta(iso) {
+    try {
+      var d = new Date(iso);
+      return d.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" }) + " " +
+        d.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" });
+    } catch (e) { return ""; }
+  }
+
+  function haceCuanto(ts) {
+    var s = Math.max(0, Math.round((Date.now() - ts) / 1000));
+    if (s < 60) return "hace " + s + " s";
+    return "hace " + Math.floor(s / 60) + " min";
+  }
+
+  var proximoEn = POLL_MS / 1000;
+  // Pausa si la pestaña se oculta O la ventana pierde el foco (otra app al frente).
+  var ventanaActiva = true;
+  window.addEventListener("blur", function () { ventanaActiva = false; });
+  window.addEventListener("focus", function () {
+    if (!ventanaActiva) { ventanaActiva = true; actualizar(); }
+  });
+  function enPausa() { return document.hidden || !ventanaActiva; }
+  setInterval(function () {
+    if (enPausa()) {
+      elEstado.textContent = "En pausa (pestaña en segundo plano)";
+      return;
+    }
+    if (ultimoOk) {
+      elEstado.textContent = "Actualizado " + haceCuanto(ultimoOk) + " • próxima en " + proximoEn + " s";
+      proximoEn = proximoEn > 0 ? proximoEn - 1 : 0;
+    } else if (ultimaError) {
+      elEstado.textContent = "Sin conexión — reintentando…";
+    }
+  }, 1000);
+
+  function actualizar() {
+    proximoEn = POLL_MS / 1000;
+    return pedirIdToken().then(leerConteosSinReintento).then(function (mapa) {
+      ultimoOk = Date.now(); ultimaError = null;
+      elPunto.classList.remove("off");
+      mostrarAviso(null);
+      renderizar(mapa, false);
+    }).catch(function (err) {
+      ultimaError = Date.now();
+      elPunto.classList.add("off");
+      mostrarAviso("Sin conexión con la nube (" + err.message + "). Se muestra el último dato guardado.");
+    });
+  }
+  function leerConteosSinReintento(token) { return leerConteos(token, false); }
+
+  document.getElementById("btn-recargar").addEventListener("click", actualizar);
+  actualizar();
+  // Sin lecturas en pausa (cuida la cuota gratuita); al volver, refresca.
+  setInterval(function () { if (!enPausa()) actualizar(); }, POLL_MS);
+  document.addEventListener("visibilitychange", function () {
+    if (!document.hidden) actualizar();
+  });
+})();
+</script>
+</body>
+</html>
