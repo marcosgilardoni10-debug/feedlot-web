@@ -1,0 +1,112 @@
+# Mantenimiento autónomo en la nube (corre solo, sin ninguna PC encendida).
+# Hace 2 cosas una vez por día:
+#   1. Ping a Supabase (~100 bytes) para que no se duerma el proyecto gratis.
+#   2. Snapshot del conteo a Firestore feedlots/{id}/backups/{fecha}
+#      (backup diario aunque nadie abra la app; lo usa el botón Restaurar).
+#
+# INSTALACIÓN (una sola vez) — todo en el repo de la página web:
+#  (ver LEEME-github.md con capturas de dónde es cada clic)
+#  1. Copiá este archivo a: .github/workflows/supabase-keepalive.yml
+#  2. Agregá 4 secrets (Settings → Secrets and variables → Actions):
+#       SUPABASE_URL       = supabaseUrl de supabase_config.json
+#       SUPABASE_ANON_KEY  = supabaseAnonKey de supabase_config.json
+#       FIREBASE_APIKEY    = apiKey de firebase_config.json
+#       FIREBASE_PROJECT   = projectId de firebase_config.json
+#  3. Probar: pestaña Actions → "Respaldo diario + keepalive" → Run workflow.
+name: Respaldo diario + keepalive
+
+on:
+  schedule:
+    - cron: '0 4 * * *' # todos los días, 04:00 UTC
+  workflow_dispatch: {} # botón manual
+
+jobs:
+  mantener:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase (keep-alive)
+        run: |
+          FECHA=$(date -u +%FT%TZ)
+          curl -sS -o /dev/null -w "keepalive HTTP %{http_code}\n" -X POST \
+            "${{ secrets.SUPABASE_URL }}/storage/v1/object/feedlot-data/sistema/keepalive-gh.json" \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Content-Type: application/json" \
+            -H "x-upsert: true" \
+            -d "{\"ping\":\"$FECHA\",\"app\":\"github-actions\"}"
+
+      - name: Snapshot Firestore a backups/{fecha}
+        env:
+          FIREBASE_APIKEY: ${{ secrets.FIREBASE_APIKEY }}
+          FIREBASE_PROJECT: ${{ secrets.FIREBASE_PROJECT }}
+          FEEDLOT_ID: la-fortuna
+        run: python3 - <<'EOF'
+          import datetime
+          import os
+          import requests
+
+          key = os.environ["FIREBASE_APIKEY"]
+          proj = os.environ["FIREBASE_PROJECT"]
+          feed = os.environ["FEEDLOT_ID"]
+          base = f"https://firestore.googleapis.com/v1/projects/{proj}/databases/(default)/documents"
+
+          tok = requests.post(
+              f"https://identitytoolkit.googleapis.com/v1/accounts:signUp?key={key}",
+              json={"returnSecureToken": True}, timeout=30).json()["idToken"]
+          H = {"Authorization": f"Bearer {tok}"}
+
+          col = requests.get(f"{base}/feedlots/{feed}/corrales_estado?pageSize=100",
+                             headers=H, timeout=30).json()
+
+          def pv(v):
+              if "integerValue" in v:
+                  return int(v["integerValue"])
+              if "doubleValue" in v:
+                  return float(v["doubleValue"])
+              if "stringValue" in v:
+                  return v["stringValue"]
+              if "timestampValue" in v:
+                  return v["timestampValue"]
+              return None
+
+          conteos = []
+          for d in col.get("documents", []):
+              f = d.get("fields", {})
+              n = pv(f.get("nombre", {}))
+              c = pv(f.get("cantidadActual", {}))
+              if n is None or c is None:
+                  continue
+              conteos.append({"nombre": n, "cantidadActual": int(c),
+                              "origen": pv(f.get("origen", {})) or "drone"})
+
+          def fv(v):
+              if isinstance(v, bool):
+                  return {"booleanValue": v}
+              if isinstance(v, int):
+                  return {"integerValue": str(v)}
+              if isinstance(v, float):
+                  return {"doubleValue": v}
+              return {"stringValue": str(v)}
+
+          hoy = datetime.date.today().isoformat()
+          body = {"fields": {
+              "fecha": {"timestampValue": datetime.datetime.now(datetime.timezone.utc).isoformat()},
+              "feedlotId": {"stringValue": feed},
+              "origenBackup": {"stringValue": "github-actions"},
+              "conteos": {"arrayValue": {"values": [
+                  {"mapValue": {"fields": {k: fv(x) for k, x in c.items()}}}
+                  for c in conteos]}}}}
+          r = requests.patch(f"{base}/feedlots/{feed}/backups/{hoy}",
+                             headers={**H, "Content-Type": "application/json"},
+                             json=body, timeout=30)
+          print("backup:", r.status_code, f"{len(conteos)} corrales")
+
+          lst = requests.get(f"{base}/feedlots/{feed}/backups?pageSize=100",
+                             headers=H, timeout=30).json()
+          ids = sorted(d["name"].split("/")[-1] for d in lst.get("documents", []))
+          for viejo in ids[:-30]:
+              requests.delete(f"{base}/feedlots/{feed}/backups/{viejo}",
+                              headers=H, timeout=30)
+              print("podado", viejo)
+          print("OK")
+          EOF
