@@ -159,6 +159,15 @@
   }
   var APIKEY = FIREBASE_CONFIG.apiKey;
   var PROJECT = FIREBASE_CONFIG.projectId;
+  // Multi-feedlot: ?feedlot=otro-id lee otro feedlot (por defecto la-fortuna).
+  var FEEDLOT = "la-fortuna";
+  try {
+    if (typeof FEEDLOT_ID === "string" && FEEDLOT_ID) FEEDLOT = FEEDLOT_ID;
+    var q = new URLSearchParams(window.location.search).get("feedlot");
+    if (q && /^[a-z0-9-]+$/i.test(q)) FEEDLOT = q.toLowerCase();
+  } catch (e) {}
+  var COLECCION = "feedlots/" + FEEDLOT + "/corrales_estado";
+  try { document.title = "Mapa del Feedlot — " + FEEDLOT; } catch (e) {}
 
   // ---------- Plano del SVG = píxeles de la foto aérea (igual que la app) ----------
   var NS = "http://www.w3.org/2000/svg";
@@ -319,7 +328,7 @@
 
   function leerConteos(token, reintento) {
     var url = "https://firestore.googleapis.com/v1/projects/" + PROJECT +
-      "/databases/(default)/documents/corrales_estado?pageSize=100";
+      "/databases/(default)/documents/" + COLECCION + "?pageSize=100";
     return fetch(url, { headers: { "Authorization": "Bearer " + token } }).then(function (r) {
       if (r.status === 401 && !reintento) {
         tokenCache = null;
