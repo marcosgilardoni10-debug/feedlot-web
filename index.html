@@ -48,9 +48,10 @@
   }
   .total .num { font-size: 34px; font-weight: 800; color: var(--acento); line-height: 1; }
   .total .rotulo { font-size: 10px; letter-spacing: 1.2px; color: var(--gris); font-weight: 700; }
-  .estado { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--gris); }
-  .punto { width: 9px; height: 9px; border-radius: 50%; background: var(--acento); box-shadow: 0 0 6px var(--acento); }
-  .punto.off { background: var(--amarillo); box-shadow: 0 0 6px var(--amarillo); }
+  .estado { display: flex; align-items: center; padding: 6px; cursor: default; }
+  .punto { width: 10px; height: 10px; border-radius: 50%; background: #5a6363; transition: background .3s; }
+  .punto.ok { background: var(--acento); box-shadow: 0 0 8px var(--acento); }
+  .punto.off { background: var(--amarillo); box-shadow: 0 0 8px var(--amarillo); }
   button.recargar {
     margin-left: auto;
     background: rgba(255,255,255,.07);
@@ -102,6 +103,7 @@
   .corral .nombre { font-size: 13px; font-weight: 700; }
   .corral .origen { font-size: 10px; color: var(--gris); }
   .corral.vacio { opacity: .55; }
+  .corral:not(.vacio) { border-left: 3px solid var(--acento); }
   .corral.vacio .n { color: var(--gris); font-size: 20px; }
   .pie { text-align: center; color: var(--gris); font-size: 11px; margin-top: 26px; }
   @media (max-width: 600px) {
@@ -113,7 +115,7 @@
 <body>
 <header>
   <div class="encabezado">
-    <h1>🐄 MAPA DEL FEEDLOT<small>Conteo en vivo — se actualiza solo cada 1 minuto</small></h1>
+    <h1>🐄 MAPA DEL FEEDLOT<small id="sub">Conteo en vivo</small></h1>
     <div class="fila-total">
       <div class="total">
         <div>
@@ -121,8 +123,8 @@
           <div class="num" id="total">—</div>
         </div>
       </div>
-      <div class="estado"><span class="punto" id="punto"></span><span id="estado">Conectando…</span></div>
-      <button class="recargar" id="btn-recargar" type="button">↻ Actualizar ahora</button>
+      <div class="estado" id="estado-caja" title="Conectando…"><span class="punto" id="punto"></span></div>
+      <button class="recargar" id="btn-recargar" type="button">↻ Refrescar</button>
     </div>
   </div>
 </header>
@@ -141,8 +143,8 @@
   var POLL_MS = 60000; // 1 minuto
   var aviso = document.getElementById("aviso");
   var elTotal = document.getElementById("total");
-  var elEstado = document.getElementById("estado");
   var elPunto = document.getElementById("punto");
+  var elEstadoCaja = document.getElementById("estado-caja");
   var elGrilla = document.getElementById("grilla");
   var elN = document.getElementById("n-corrales");
   var svg = document.getElementById("mapa");
@@ -168,6 +170,16 @@
   } catch (e) {}
   var COLECCION = "feedlots/" + FEEDLOT + "/corrales_estado";
   try { document.title = "Mapa del Feedlot — " + FEEDLOT; } catch (e) {}
+  try { document.getElementById("sub").textContent = "Conteo en vivo · " + FEEDLOT.toUpperCase(); } catch (e) {}
+
+  // Puntito = estado de comunicación (el detalle va en el tooltip).
+  function setEstado(modo, texto) {
+    elPunto.classList.remove("ok");
+    elPunto.classList.remove("off");
+    if (modo === "ok") elPunto.classList.add("ok");
+    if (modo === "off") elPunto.classList.add("off");
+    elEstadoCaja.setAttribute("title", texto);
+  }
 
   // ---------- Plano del SVG = píxeles de la foto aérea (igual que la app) ----------
   var NS = "http://www.w3.org/2000/svg";
@@ -355,8 +367,6 @@
   }
 
   // ---------- Estado + polling ----------
-  var ultimoOk = null;
-  var ultimaError = null;
 
   try {
     var cache = JSON.parse(localStorage.getItem("vacas_counts") || "null");
@@ -385,6 +395,7 @@
       }
     });
     elTotal.textContent = conDatos ? total : "—";
+    elN.textContent = conDatos + "/" + ordenados.length;
     try { localStorage.setItem("vacas_counts", JSON.stringify({ ts: Date.now(), mapa: mapa })); } catch (e) {}
   }
 
@@ -396,43 +407,24 @@
     } catch (e) { return ""; }
   }
 
-  function haceCuanto(ts) {
-    var s = Math.max(0, Math.round((Date.now() - ts) / 1000));
-    if (s < 60) return "hace " + s + " s";
-    return "hace " + Math.floor(s / 60) + " min";
-  }
-
-  var proximoEn = POLL_MS / 1000;
   // Pausa si la pestaña se oculta O la ventana pierde el foco (otra app al frente).
   var ventanaActiva = true;
-  window.addEventListener("blur", function () { ventanaActiva = false; });
+  window.addEventListener("blur", function () {
+    ventanaActiva = false;
+    setEstado("off", "En pausa (ventana en segundo plano)");
+  });
   window.addEventListener("focus", function () {
     if (!ventanaActiva) { ventanaActiva = true; actualizar(); }
   });
   function enPausa() { return document.hidden || !ventanaActiva; }
-  setInterval(function () {
-    if (enPausa()) {
-      elEstado.textContent = "En pausa (pestaña en segundo plano)";
-      return;
-    }
-    if (ultimoOk) {
-      elEstado.textContent = "Actualizado " + haceCuanto(ultimoOk) + " • próxima en " + proximoEn + " s";
-      proximoEn = proximoEn > 0 ? proximoEn - 1 : 0;
-    } else if (ultimaError) {
-      elEstado.textContent = "Sin conexión — reintentando…";
-    }
-  }, 1000);
 
   function actualizar() {
-    proximoEn = POLL_MS / 1000;
     return pedirIdToken().then(leerConteosSinReintento).then(function (mapa) {
-      ultimoOk = Date.now(); ultimaError = null;
-      elPunto.classList.remove("off");
+      setEstado("ok", "En línea — tocá Refrescar para actualizar");
       mostrarAviso(null);
       renderizar(mapa, false);
     }).catch(function (err) {
-      ultimaError = Date.now();
-      elPunto.classList.add("off");
+      setEstado("off", "Sin conexión con la nube");
       mostrarAviso("Sin conexión con la nube (" + err.message + "). Se muestra el último dato guardado.");
     });
   }
