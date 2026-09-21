@@ -30,15 +30,27 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Ping Supabase (keep-alive)
+        # Best-effort: si falla NO frena el backup (continue-on-error).
+        continue-on-error: true
         run: |
           FECHA=$(date -u +%FT%TZ)
-          curl -sS -o /dev/null -w "keepalive HTTP %{http_code}\n" -X POST \
-            "${{ secrets.SUPABASE_URL }}/storage/v1/object/feedlot-data/sistema/keepalive-gh.json" \
-            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
-            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
-            -H "Content-Type: application/json" \
-            -H "x-upsert: true" \
-            -d "{\"ping\":\"$FECHA\",\"app\":\"github-actions\"}"
+          OK=""
+          for i in 1 2 3; do
+            CODE=$(curl -sS -o /dev/null -w "%{http_code}" -X POST \
+              "${{ secrets.SUPABASE_URL }}/storage/v1/object/feedlot-data/sistema/keepalive-gh.json" \
+              -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+              -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
+              -H "Content-Type: application/json" \
+              -H "x-upsert: true" \
+              -d "{\"ping\":\"$FECHA\",\"app\":\"github-actions\"}" || true)
+            echo "intento $i: HTTP $CODE"
+            case "$CODE" in 200|201|204) OK=1; break;; esac
+            sleep 20
+          done
+          if [ -z "$OK" ]; then
+            echo "keepalive falló 3 veces (transitorio, no bloquea el backup)"
+            exit 1
+          fi
 
       - name: Snapshot Firestore a backups/{fecha}
         env:
