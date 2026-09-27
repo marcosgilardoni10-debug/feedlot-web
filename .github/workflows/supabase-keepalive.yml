@@ -116,18 +116,25 @@ jobs:
       - name: Ping Supabase (keep-alive)
         # Va DESPUÉS del backup a propósito: si el ping falla, el run sale rojo
         # (alarma visible) pero el backup ya quedó hecho.
+        # NOTA: bucket `annotations` a propósito — es el único probado para
+        # escritura anónima (la app sube ahí su keepalive igual). El bucket
+        # `feedlot-data` devuelve HTTP 400 con anon key (sin política
+        # INSERT/UPDATE para anónimo; Supabase informa el fallo RLS como 400).
+        # Cualquier subida cuenta como actividad del proyecto, el bucket da igual.
         run: |
           FECHA=$(date -u +%FT%TZ)
           OK=""
           for i in 1 2 3; do
-            CODE=$(curl -sS -o /dev/null -w "%{http_code}" -X POST \
-              "${{ secrets.SUPABASE_URL }}/storage/v1/object/feedlot-data/sistema/keepalive-gh.json" \
+            RESP=$(mktemp)
+            CODE=$(curl -sS -o "$RESP" -w "%{http_code}" -X POST \
+              "${{ secrets.SUPABASE_URL }}/storage/v1/object/annotations/sistema/keepalive-gh.json" \
               -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
               -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
               -H "Content-Type: application/json" \
               -H "x-upsert: true" \
               -d "{\"ping\":\"$FECHA\",\"app\":\"github-actions\"}" || true)
-            echo "intento $i: HTTP $CODE"
+            echo "intento $i: HTTP $CODE $(cat "$RESP")"
+            rm -f "$RESP"
             case "$CODE" in 200|201|204) OK=1; break;; esac
             sleep 20
           done
