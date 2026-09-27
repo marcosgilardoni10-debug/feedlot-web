@@ -418,14 +418,35 @@
   });
   function enPausa() { return document.hidden || !ventanaActiva; }
 
+  // Safari iOS informa los cortes de red como "Load failed": el pedido no
+  // llegó a Google (wifi/datos, VPN, bloqueador o relay lo frenaron en el
+  // propio celular). Mensaje accionable + 1 reintento automático.
+  function mensajeAyuda(err) {
+    var m = "" + ((err && err.message) || err);
+    if (/load failed|cancelled|networkerror|failed to fetch|network request failed/i.test(m)) {
+      return "Sin conexión con la nube (" + m + "). Revisá en ESE celular: " +
+        "wifi o datos activados, sin VPN, sin bloqueador de anuncios para esta " +
+        "página, y tocá Refrescar. En iPhone también probá abrir la misma " +
+        "dirección en Chrome.";
+    }
+    return "Sin conexión con la nube (" + m + "). Se muestra el último dato guardado.";
+  }
+
+  var reintentoPendiente = false;
   function actualizar() {
     return pedirIdToken().then(leerConteosSinReintento).then(function (mapa) {
+      reintentoPendiente = false;
       setEstado("ok", "En línea — tocá Refrescar para actualizar");
       mostrarAviso(null);
       renderizar(mapa, false);
     }).catch(function (err) {
       setEstado("off", "Sin conexión con la nube");
-      mostrarAviso("Sin conexión con la nube (" + err.message + "). Se muestra el último dato guardado.");
+      mostrarAviso(mensajeAyuda(err));
+      // Un reintento automático por si fue un corte puntual de red.
+      if (!reintentoPendiente) {
+        reintentoPendiente = true;
+        setTimeout(function () { if (!enPausa()) actualizar(); }, 5000);
+      }
     });
   }
   function leerConteosSinReintento(token) { return leerConteos(token, false); }
