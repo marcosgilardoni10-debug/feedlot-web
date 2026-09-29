@@ -159,7 +159,6 @@
     mostrarAviso("Falta el archivo config-data.js al lado de este index.html.");
     return;
   }
-  var APIKEY = FIREBASE_CONFIG.apiKey;
   var PROJECT = FIREBASE_CONFIG.projectId;
   // Multi-feedlot: ?feedlot=otro-id lee otro feedlot (por defecto la-fortuna).
   var FEEDLOT = "la-fortuna";
@@ -283,52 +282,9 @@
     tarjetas[c.nombre] = d;
   });
 
-  // ---------- Auth anónima (igual que la app) + lectura Firestore ----------
-  var tokenCache = null; // {token, vence}
-  function guardarRefresh(r) { try { localStorage.setItem("vacas_refresh", r); } catch (e) {} }
-  function leerRefresh() { try { return localStorage.getItem("vacas_refresh"); } catch (e) { return null; } }
-
-  function pedirIdToken() {
-    if (tokenCache && Date.now() < tokenCache.vence - 60000) {
-      return Promise.resolve(tokenCache.token);
-    }
-    var refresco = leerRefresh();
-    var promesa;
-    if (refresco) {
-      promesa = fetch("https://securetoken.googleapis.com/v1/token?key=" + APIKEY, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ grant_type: "refresh_token", refresh_token: refresco })
-      }).then(function (r) {
-        if (!r.ok) throw new Error("refresh");
-        return r.json();
-      }).then(function (j) {
-        guardarRefresh(j.refresh_token);
-        return { token: j.id_token, seg: parseInt(j.expires_in || "3600", 10) };
-      }).catch(function () { return firmarAnonimo(); });
-    } else {
-      promesa = firmarAnonimo();
-    }
-    return promesa.then(function (t) {
-      tokenCache = { token: t.token, vence: Date.now() + t.seg * 1000 };
-      return t.token;
-    });
-  }
-
-  function firmarAnonimo() {
-    return fetch("https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=" + APIKEY, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ returnSecureToken: true })
-    }).then(function (r) {
-      if (!r.ok) throw new Error("No se pudo autenticar (HTTP " + r.status + ")");
-      return r.json();
-    }).then(function (j) {
-      guardarRefresh(j.refreshToken);
-      return { token: j.idToken, seg: parseInt(j.expiresIn || "3600", 10) };
-    });
-  }
-
+  // ---------- Lectura PÚBLICA de Firestore (sin auth ni token) ----------
+  // Las rules permiten leer conteos y backups sin login; la apiKey visible es
+  // pública por diseño y con ella sola no se puede escribir nada.
   function valorCampo(v) {
     if (!v) return null;
     if ("stringValue" in v) return v.stringValue;
@@ -338,15 +294,10 @@
     return null;
   }
 
-  function leerConteos(token, reintento) {
+  function leerConteos() {
     var url = "https://firestore.googleapis.com/v1/projects/" + PROJECT +
       "/databases/(default)/documents/" + COLECCION + "?pageSize=100";
-    return fetch(url, { headers: { "Authorization": "Bearer " + token } }).then(function (r) {
-      if (r.status === 401 && !reintento) {
-        tokenCache = null;
-        try { localStorage.removeItem("vacas_refresh"); } catch (e) {}
-        return pedirIdToken().then(function (t2) { return leerConteos(t2, true); });
-      }
+    return fetch(url).then(function (r) {
       if (!r.ok) throw new Error("Firestore HTTP " + r.status);
       return r.json();
     }).then(function (j) {
@@ -434,7 +385,7 @@
 
   var reintentoPendiente = false;
   function actualizar() {
-    return pedirIdToken().then(leerConteosSinReintento).then(function (mapa) {
+    return leerConteos().then(function (mapa) {
       reintentoPendiente = false;
       setEstado("ok", "En línea — tocá Refrescar para actualizar");
       mostrarAviso(null);
@@ -449,8 +400,6 @@
       }
     });
   }
-  function leerConteosSinReintento(token) { return leerConteos(token, false); }
-
   document.getElementById("btn-recargar").addEventListener("click", actualizar);
   actualizar();
   // Sin lecturas en pausa (cuida la cuota gratuita); al volver, refresca.
