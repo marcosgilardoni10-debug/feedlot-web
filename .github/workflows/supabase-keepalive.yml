@@ -7,11 +7,16 @@
 # INSTALACIÓN (una sola vez) — todo en el repo de la página web:
 #  (ver LEEME-github.md con capturas de dónde es cada clic)
 #  1. Copiá este archivo a: .github/workflows/supabase-keepalive.yml
-#  2. Agregá 4 secrets (Settings → Secrets and variables → Actions):
+#  2. Agregá 6 secrets (Settings → Secrets and variables → Actions):
 #       SUPABASE_URL       = supabaseUrl de supabase_config.json
 #       SUPABASE_ANON_KEY  = supabaseAnonKey de supabase_config.json
 #       FIREBASE_APIKEY    = apiKey de firebase_config.json
 #       FIREBASE_PROJECT   = projectId de firebase_config.json
+#       FIREBASE_ROBOT_EMAIL    = email del usuario robot (operador)
+#       FIREBASE_ROBOT_PASSWORD = contraseña del usuario robot
+#     El robot es un operador más: su uid debe existir en Firestore
+#     `operadores/{uid}` con {feedlots: ["*"]}. Sin ese doc, el snapshot
+#     sale rojo (rules deniegan la escritura del backup).
 #  3. Probar: pestaña Actions → "Respaldo diario + keepalive" → Run workflow.
 name: Respaldo diario + keepalive
 
@@ -33,6 +38,8 @@ jobs:
         env:
           FIREBASE_APIKEY: ${{ secrets.FIREBASE_APIKEY }}
           FIREBASE_PROJECT: ${{ secrets.FIREBASE_PROJECT }}
+          FIREBASE_ROBOT_EMAIL: ${{ secrets.FIREBASE_ROBOT_EMAIL }}
+          FIREBASE_ROBOT_PASSWORD: ${{ secrets.FIREBASE_ROBOT_PASSWORD }}
           FEEDLOT_ID: la-fortuna
         run: |
           python3 - <<'EOF'
@@ -45,9 +52,15 @@ jobs:
           feed = os.environ["FEEDLOT_ID"]
           base = f"https://firestore.googleapis.com/v1/projects/{proj}/databases/(default)/documents"
 
-          tok = requests.post(
-              f"https://identitytoolkit.googleapis.com/v1/accounts:signUp?key={key}",
-              json={"returnSecureToken": True}, timeout=30).json()["idToken"]
+          # Cuenta robot (operador): login email+contraseña. El signUp anónimo
+          # ya no sirve (las rules solo dejan escribir a operadores).
+          login = requests.post(
+              f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={key}",
+              json={"email": os.environ["FIREBASE_ROBOT_EMAIL"],
+                    "password": os.environ["FIREBASE_ROBOT_PASSWORD"],
+                    "returnSecureToken": True}, timeout=30)
+          login.raise_for_status()
+          tok = login.json()["idToken"]
           H = {"Authorization": f"Bearer {tok}"}
 
           col_r = requests.get(f"{base}/feedlots/{feed}/corrales_estado?pageSize=100",
