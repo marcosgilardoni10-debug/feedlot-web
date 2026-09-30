@@ -241,11 +241,12 @@ window.__arrancarMapa = function () {
   CORRALES.forEach(function (c) {
     var pp = c.pts;
     // Campos solo-etiqueta: sin polígono de fondo, solo la cajita flotante.
+    // Campos con borde: contorno sin relleno (marca el área sin tapar la foto).
     if (!c.soloEtiqueta) {
     var pts = pp.map(function (q) { return q[0].toFixed(1) + "," + q[1].toFixed(1); }).join(" ");
     var pol = document.createElementNS(NS, "polygon");
     pol.setAttribute("points", pts);
-    pol.setAttribute("fill", "rgba(79,195,247,.20)");
+    pol.setAttribute("fill", c.borde ? "none" : "rgba(79,195,247,.20)");
     pol.setAttribute("stroke", "#4fc3f7");
     pol.setAttribute("stroke-width", "3");
     pol.setAttribute("stroke-linejoin", "round");
