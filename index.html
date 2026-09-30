@@ -141,7 +141,7 @@
 // fetch+eval fallaba en algunos navegadores de campo sin motivo visible).
 // Anti-caché: el ?v= cambia en cada deploy de config-data.js (URL nueva =
 // descarga fresca, sin incógnito). Si falla, reintenta cada 15 s.
-var __CONFIG_V = "20261001a"; // <-- bumpear en cada deploy de config-data.js
+var __CONFIG_V = "20261001b"; // <-- bumpear en cada deploy de config-data.js
 function __avisoConfig(msg) {
   document.getElementById("aviso").textContent = msg;
   document.getElementById("aviso").classList.add("visible");
@@ -259,7 +259,8 @@ window.__arrancarMapa = function () {
     var bh = Math.max(1, Math.max.apply(null, ys) - Math.min.apply(null, ys));
     // Solo-etiqueta: tamaño fijo de etiqueta (el punto es solo el centro).
     if (c.soloEtiqueta) { bw = 130; bh = 64; }
-    var cen = centroide(pp);
+    // Centro explícito (mover etiqueta sin tocar el polígono) o centroide.
+    var cen = (c.cx !== undefined && c.cy !== undefined) ? [c.cx, c.cy] : centroide(pp);
 
     var g = document.createElementNS(NS, "g");
     var fondo = document.createElementNS(NS, "rect");
