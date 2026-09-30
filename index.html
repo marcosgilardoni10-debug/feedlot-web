@@ -137,23 +137,11 @@
 </main>
 
 <script>
-// Bootstrap anti-caché: trae config-data.js siempre fresco de la red (sin
-// caché), así un celu que abrió la página antes ve los corrales nuevos sin
-// incógnito ni limpiar nada. Si no hay red, usa la copia cacheada por el
-// navegador (igual que antes).
-function __arrancarConConfig() {
-  // Verificar que la config quedó definida (un 200 vacío o truncado evalúa
-  // sin error pero no define nada: eso también es fallo y reintenta).
-  if (typeof CORRALES === "undefined" || typeof IMG === "undefined" ||
-      typeof FIREBASE_CONFIG === "undefined") {
-    __falloConfig(true, "sin datos");
-    return;
-  }
-  // Evitar doble arranque (duplicaría polígonos y tarjetas).
-  if (window.__mapaArrancado) return;
-  window.__mapaArrancado = true;
-  if (typeof window.__arrancarMapa === "function") window.__arrancarMapa();
-}
+// Carga de config-data.js por <script> clásico (el mecanismo más compatible;
+// fetch+eval fallaba en algunos navegadores de campo sin motivo visible).
+// Anti-caché: el ?v= cambia en cada deploy de config-data.js (URL nueva =
+// descarga fresca, sin incógnito). Si falla, reintenta cada 15 s.
+var __CONFIG_V = "20261001a"; // <-- bumpear en cada deploy de config-data.js
 function __avisoConfig(msg) {
   document.getElementById("aviso").textContent = msg;
   document.getElementById("aviso").classList.add("visible");
@@ -164,47 +152,29 @@ function __baseUrl() {
   if (b.charAt(b.length - 1) !== "/") b += "/";
   return b;
 }
-// Reintenta solo hasta que la config cargue (los deploys de Pages tienen una
-// ventana donde el archivo 404ea; sin reintento el cartel quedaba pegado).
-function __configCacheada(reintentar) {
+function __arrancarConConfig() {
+  if (typeof CORRALES === "undefined" || typeof IMG === "undefined" ||
+      typeof FIREBASE_CONFIG === "undefined") {
+    __falloConfig("sin datos");
+    return;
+  }
+  // Evitar doble arranque (duplicaría polígonos y tarjetas).
+  if (window.__mapaArrancado) return;
+  window.__mapaArrancado = true;
+  if (typeof window.__arrancarMapa === "function") window.__arrancarMapa();
+}
+function __falloConfig(motivo) {
+  __avisoConfig("No se pudo cargar config-data.js (" + motivo + "). Reintentando…");
+  setTimeout(function () { __cargarConfig(); }, 15000);
+}
+function __cargarConfig() {
   var s = document.createElement("script");
-  s.src = __baseUrl() + "config-data.js";
+  s.src = __baseUrl() + "config-data.js?v=" + __CONFIG_V;
   s.onload = __arrancarConConfig;
-  s.onerror = function () { __falloConfig(reintentar, "script 404"); };
+  s.onerror = function () { __falloConfig("red/404"); };
   document.head.appendChild(s);
 }
-function __falloConfig(reintentar, motivo) {
-  __avisoConfig("No se pudo cargar config-data.js (" + motivo + "). Reintentando…");
-  if (reintentar) setTimeout(function () { __cargarConfig(true); }, 15000);
-}
-function __cargarConfig(reintentar) {
-  fetch(__baseUrl() + "config-data.js", { cache: "no-store" }).then(function (r) {
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    return r.text();
-  }).then(function (t) {
-    if (!t || !t.trim()) throw new Error("vacío");
-    try {
-      (0, eval)(t);
-    } catch (e) {
-      __configCacheada(reintentar);
-      return;
-    }
-    __arrancarConConfig();
-  }).catch(function (err) {
-    var m = (err && err.message) || "red";
-    if (typeof CORRALES === "undefined") {
-      // Fallback a copia cacheada; si tampoco define nada, reintenta.
-      var s = document.createElement("script");
-      s.src = __baseUrl() + "config-data.js";
-      s.onload = __arrancarConConfig;
-      s.onerror = function () { __falloConfig(reintentar, m); };
-      document.head.appendChild(s);
-    } else {
-      __arrancarConConfig();
-    }
-  });
-}
-__cargarConfig(true);
+__cargarConfig();
 </script>
 <script>
 window.__arrancarMapa = function () {
