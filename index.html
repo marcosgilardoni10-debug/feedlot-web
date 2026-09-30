@@ -142,6 +142,13 @@
 // incógnito ni limpiar nada. Si no hay red, usa la copia cacheada por el
 // navegador (igual que antes).
 function __arrancarConConfig() {
+  // Verificar que la config quedó definida (un 200 vacío o truncado evalúa
+  // sin error pero no define nada: eso también es fallo y reintenta).
+  if (typeof CORRALES === "undefined" || typeof IMG === "undefined" ||
+      typeof FIREBASE_CONFIG === "undefined") {
+    __falloConfig(true);
+    return;
+  }
   if (typeof window.__arrancarMapa === "function") window.__arrancarMapa();
 }
 function __avisoConfig(msg) {
