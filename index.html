@@ -144,31 +144,40 @@
 function __arrancarConConfig() {
   if (typeof window.__arrancarMapa === "function") window.__arrancarMapa();
 }
-function __configCacheada() {
+function __avisoConfig(msg) {
+  document.getElementById("aviso").textContent = msg;
+  document.getElementById("aviso").classList.add("visible");
+}
+// Reintenta solo hasta que la config cargue (los deploys de Pages tienen una
+// ventana donde el archivo 404ea; sin reintento el cartel quedaba pegado).
+function __configCacheada(reintentar) {
   var s = document.createElement("script");
   s.src = "config-data.js";
   s.onload = __arrancarConConfig;
-  s.onerror = function () {
-    document.getElementById("aviso").textContent =
-      "Falta el archivo config-data.js al lado de este index.html.";
-    document.getElementById("aviso").classList.add("visible");
-  };
+  s.onerror = function () { __falloConfig(reintentar); };
   document.head.appendChild(s);
 }
-fetch("config-data.js", { cache: "no-store" }).then(function (r) {
-  if (!r.ok) throw new Error("HTTP " + r.status);
-  return r.text();
-}).then(function (t) {
-  try {
-    (0, eval)(t);
-  } catch (e) {
-    __configCacheada();
-    return;
-  }
-  __arrancarConConfig();
-}).catch(function () {
-  __configCacheada();
-});
+function __falloConfig(reintentar) {
+  __avisoConfig("No se pudo cargar config-data.js (despliegue en curso?). Reintentando…");
+  if (reintentar) setTimeout(function () { __cargarConfig(true); }, 15000);
+}
+function __cargarConfig(reintentar) {
+  fetch("config-data.js", { cache: "no-store" }).then(function (r) {
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return r.text();
+  }).then(function (t) {
+    try {
+      (0, eval)(t);
+    } catch (e) {
+      __configCacheada(reintentar);
+      return;
+    }
+    __arrancarConConfig();
+  }).catch(function () {
+    __configCacheada(reintentar);
+  });
+}
+__cargarConfig(true);
 </script>
 <script>
 window.__arrancarMapa = function () {
