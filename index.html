@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Mapa del Feedlot — Vacas en vivo</title>
+<meta name="robots" content="noindex">
+<title>Mapa del Feedlot</title>
 <style>
   :root {
     --fondo: #080a0a;
@@ -36,7 +37,7 @@
   h1 { font-size: 19px; letter-spacing: .6px; font-weight: 800; }
   h1 small { display: block; font-size: 11px; color: var(--gris); font-weight: 500; margin-top: 2px; }
   .fila-total {
-    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
     margin-top: 12px;
   }
   .total {
@@ -52,8 +53,7 @@
   .punto { width: 10px; height: 10px; border-radius: 50%; background: #5a6363; transition: background .3s; }
   .punto.ok { background: var(--acento); box-shadow: 0 0 8px var(--acento); }
   .punto.off { background: var(--amarillo); box-shadow: 0 0 8px var(--amarillo); }
-  button.recargar {
-    margin-left: auto;
+  button.recargar, select.feedlot-sel, button.salir {
     background: rgba(255,255,255,.07);
     color: var(--texto);
     border: 1px solid var(--borde);
@@ -62,8 +62,12 @@
     font-size: 13px; font-weight: 700;
     cursor: pointer;
   }
+  select.feedlot-sel { max-width: 200px; }
+  button.salir { color: var(--gris); }
+  .spacer { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   button.recargar:active { transform: scale(.97); }
   main { max-width: 1100px; margin: 0 auto; padding: 16px 18px 40px; }
+  .vista.oculto { display: none; }
   .aviso {
     display: none;
     background: rgba(255,213,79,.10);
@@ -106,6 +110,65 @@
   .corral:not(.vacio) { border-left: 3px solid var(--acento); }
   .corral.vacio .n { color: var(--gris); font-size: 20px; }
   .pie { text-align: center; color: var(--gris); font-size: 11px; margin-top: 26px; }
+
+  /* ---------- Login ---------- */
+  .login-caja {
+    max-width: 420px; margin: 8vh auto 0;
+    background: var(--panel);
+    border: 1px solid var(--borde);
+    border-radius: 18px;
+    padding: 28px 26px;
+  }
+  .login-caja h2 {
+    font-size: 17px; color: var(--texto); letter-spacing: .4px;
+    margin: 0 0 4px; font-weight: 800;
+  }
+  .login-caja .sub { color: var(--gris); font-size: 12px; margin-bottom: 18px; }
+  .campo { margin-bottom: 12px; }
+  .campo label { display: block; font-size: 11px; color: var(--gris); font-weight: 700; letter-spacing: .4px; margin-bottom: 6px; }
+  .campo input {
+    width: 100%;
+    background: var(--tarjeta);
+    border: 1px solid var(--borde);
+    border-radius: 10px;
+    color: var(--texto);
+    padding: 12px 12px;
+    font-size: 15px;
+  }
+  .campo input:focus { outline: 2px solid rgba(45,212,191,.4); border-color: var(--acento); }
+  .btn-entrar {
+    width: 100%;
+    margin-top: 6px;
+    background: var(--acento);
+    color: #04211c;
+    border: 0; border-radius: 12px;
+    padding: 13px; font-size: 15px; font-weight: 800; cursor: pointer;
+  }
+  .btn-entrar:disabled { opacity: .5; cursor: default; }
+  .error-login {
+    display: none;
+    margin-top: 12px;
+    background: rgba(255,82,82,.10);
+    border: 1px solid rgba(255,82,82,.35);
+    color: #ffb0b0;
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+  .error-login.visible { display: block; }
+  .cargando { text-align: center; color: var(--gris); font-size: 13px; padding: 40px 0; }
+  .bloqueo-caja {
+    max-width: 460px; margin: 10vh auto 0;
+    background: var(--panel);
+    border: 1px solid rgba(255,213,79,.35);
+    border-radius: 18px;
+    padding: 28px 26px;
+    text-align: center;
+  }
+  .bloqueo-caja h2 { font-size: 17px; margin-bottom: 8px; }
+  .bloqueo-caja p { color: var(--gris); font-size: 13px; line-height: 1.55; }
+  .oculto { display: none; }
+
   @media (max-width: 600px) {
     .total .num { font-size: 28px; }
     .grilla { grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); }
@@ -124,144 +187,296 @@
         </div>
       </div>
       <div class="estado" id="estado-caja" title="Conectando…"><span class="punto" id="punto"></span></div>
-      <button class="recargar" id="btn-recargar" type="button">↻ Refrescar</button>
+      <div class="spacer">
+        <select class="feedlot-sel oculto" id="sel-feedlot" aria-label="Elegir feedlot"></select>
+        <button class="recargar oculto" id="btn-recargar" type="button">↻ Refrescar</button>
+        <button class="salir oculto" id="btn-salir" type="button">Salir</button>
+      </div>
     </div>
   </div>
 </header>
+
 <main>
-  <div class="aviso" id="aviso"></div>
-  <div class="mapa-caja"><svg id="mapa" role="img" aria-label="Mapa de corrales"></svg></div>
-  <h2>CORRALES (<span id="n-corrales">—</span>)</h2>
-  <div class="grilla" id="grilla"></div>
-  <div class="pie">Los números los escribe la app de conteo (drone o carga manual).</div>
+  <!-- ===== Login ===== -->
+  <section id="pantalla-login" class="vista">
+    <form class="login-caja" id="form-login" autocomplete="on">
+      <h2>Ingresar</h2>
+      <div class="sub">Mapa del feedlot · solo personal autorizado</div>
+      <div class="campo">
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" autocomplete="username" required placeholder="tu@email.com">
+      </div>
+      <div class="campo">
+        <label for="password">Contraseña</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required placeholder="••••••••">
+      </div>
+      <button class="btn-entrar" id="btn-entrar" type="submit">Entrar</button>
+      <div class="error-login" id="error-login"></div>
+    </form>
+  </section>
+
+  <!-- ===== Suspensión por falta de pago ===== -->
+  <section id="pantalla-bloqueo" class="vista oculto">
+    <div class="bloqueo-caja">
+      <h2>⏸ Suscripción suspendida</h2>
+      <p id="bloqueo-detalle">El acceso a este feedlot está pausado.<br>Contactá al administrador para reactivarlo.</p>
+      <button class="salir" id="btn-salir-bloqueo" type="button" style="margin-top:16px">Cambiar de cuenta</button>
+    </div>
+  </section>
+
+  <!-- ===== Mapa ===== -->
+  <section id="pantalla-app" class="vista oculto">
+    <div class="aviso" id="aviso"></div>
+    <div class="mapa-caja"><svg id="mapa" role="img" aria-label="Mapa de corrales"></svg></div>
+    <h2>CORRALES (<span id="n-corrales">—</span>)</h2>
+    <div class="grilla" id="grilla"></div>
+    <div class="pie">Los números los escribe la app de conteo (drone o carga manual). Requiere sesión activa.</div>
+  </section>
 </main>
 
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script>
-// Carga de config-data.js por <script> clásico (el mecanismo más compatible;
-// fetch+eval fallaba en algunos navegadores de campo sin motivo visible).
-// Anti-caché: el ?v= cambia en cada deploy de config-data.js (URL nueva =
-// descarga fresca, sin incógnito). Si falla, reintenta cada 15 s.
-var __CONFIG_V = "20261001b"; // <-- bumpear en cada deploy de config-data.js
-function __avisoConfig(msg) {
-  document.getElementById("aviso").textContent = msg;
-  document.getElementById("aviso").classList.add("visible");
+"use strict";
+// ---------- Config pública (apiKey de Firebase: pública por diseño; las
+// reglas del servidor son las que protegen los datos) ----------
+var FIREBASE_CONFIG = {
+  apiKey: "AIzaSyAYD92lcckiqZP3P7-FPwXwFG0weDuiWKw",
+  projectId: "vacas-app-34468"
+};
+var COLECCION = function (feedlotId) { return "feedlots/" + feedlotId + "/corrales_estado"; };
+var POLL_MS = 60000;
+
+firebase.initializeApp(FIREBASE_CONFIG);
+var auth = firebase.auth();
+
+var elLogin = document.getElementById("pantalla-login");
+var elBloqueo = document.getElementById("pantalla-bloqueo");
+var elApp = document.getElementById("pantalla-app");
+var elError = document.getElementById("error-login");
+var btnEntrar = document.getElementById("btn-entrar");
+var selFeedlot = document.getElementById("sel-feedlot");
+var btnSalir = document.getElementById("btn-salir");
+var btnSalirBloqueo = document.getElementById("btn-salir-bloqueo");
+var aviso = document.getElementById("aviso");
+var elTotal = document.getElementById("total");
+var elPunto = document.getElementById("punto");
+var elEstadoCaja = document.getElementById("estado-caja");
+var elGrilla = document.getElementById("grilla");
+var elN = document.getElementById("n-corrales");
+var svg = document.getElementById("mapa");
+var elSub = document.getElementById("sub");
+
+var feedlotsReg = [];      // registro completo (feedlots.json)
+var permitidos = [];       // feedlots que este usuario puede ver
+var feedlotActual = null;  // objeto del registro en pantalla
+var estadoPoll = null;
+
+function mostrarVista(cual) {
+  [elLogin, elBloqueo, elApp].forEach(function (v) { v.classList.add("oculto"); });
+  if (cual === "login") elLogin.classList.remove("oculto");
+  else if (cual === "bloqueo") elBloqueo.classList.remove("oculto");
+  else elApp.classList.remove("oculto");
 }
-// Base absoluta normalizada (cubre página abierta con o sin "/" final).
-function __baseUrl() {
-  var b = String(location.href).split("#")[0].split("?")[0];
-  if (b.charAt(b.length - 1) !== "/") b += "/";
-  return b;
+function mostrarAviso(msg) {
+  if (!msg) { aviso.classList.remove("visible"); aviso.textContent = ""; return; }
+  aviso.textContent = msg;
+  aviso.classList.add("visible");
 }
-function __arrancarConConfig() {
-  if (typeof CORRALES === "undefined" || typeof IMG === "undefined" ||
-      typeof FIREBASE_CONFIG === "undefined") {
-    __falloConfig("sin datos");
+function setEstado(modo, texto) {
+  elPunto.classList.remove("ok");
+  elPunto.classList.remove("off");
+  if (modo === "ok") elPunto.classList.add("ok");
+  if (modo === "off") elPunto.classList.add("off");
+  elEstadoCaja.setAttribute("title", texto);
+}
+function errorHumano(e) {
+  var c = (e && e.code) || "";
+  if (/wrong-password|user-not-found|invalid-credential/.test(c)) return "Email o contraseña incorrectos.";
+  if (/too-many-requests/.test(c)) return "Demasiados intentos. Probá de nuevo en unos minutos.";
+  if (/network-request-failed/.test(c)) return "Sin conexión con la nube. Revisá tu internet y probá de nuevo.";
+  return "No se pudo ingresar (" + (c || "error") + ").";
+}
+
+// ---------- Lectura REST autenticada ----------
+function restGet(path) {
+  return auth.currentUser.getIdToken().then(function (t) {
+    return fetch("https://firestore.googleapis.com/v1/projects/" + FIREBASE_CONFIG.projectId +
+      "/databases/(default)/documents/" + path, {
+      headers: { Authorization: "Bearer " + t }
+    });
+  }).then(function (r) {
+    if (r.status === 401 || r.status === 403) throw new Error("SIN_PERMISO");
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return r.json();
+  });
+}
+function valorCampo(v) {
+  if (!v) return null;
+  if ("stringValue" in v) return v.stringValue;
+  if ("integerValue" in v) return parseInt(v.integerValue, 10);
+  if ("doubleValue" in v) return v.doubleValue;
+  if ("timestampValue" in v) return v.timestampValue;
+  if ("booleanValue" in v) return v.booleanValue;
+  if ("arrayValue" in v) return (v.arrayValue.values || []).map(valorCampo);
+  return null;
+}
+function camposDoc(d) {
+  var out = {}, f = (d && d.fields) || {}, k;
+  for (k in f) if (Object.prototype.hasOwnProperty.call(f, k)) out[k] = valorCampo(f[k]);
+  return out;
+}
+
+// ---------- Sesión ----------
+document.getElementById("form-login").addEventListener("submit", function (ev) {
+  ev.preventDefault();
+  elError.classList.remove("visible");
+  btnEntrar.disabled = true;
+  var email = document.getElementById("email").value.trim();
+  var pass = document.getElementById("password").value;
+  auth.signInWithEmailAndPassword(email, pass)
+    .catch(function (e) {
+      elError.textContent = errorHumano(e);
+      elError.classList.add("visible");
+    })
+    .finally(function () { btnEntrar.disabled = false; });
+});
+function salir() {
+  if (estadoPoll) { clearInterval(estadoPoll); estadoPoll = null; }
+  auth.signOut();
+}
+btnSalir.addEventListener("click", salir);
+btnSalirBloqueo.addEventListener("click", salir);
+
+auth.onAuthStateChanged(function (user) {
+  if (!user) {
+    if (estadoPoll) { clearInterval(estadoPoll); estadoPoll = null; }
+    btnSalir.classList.add("oculto");
+    document.getElementById("btn-recargar").classList.add("oculto");
+    selFeedlot.classList.add("oculto");
+    mostrarVista("login");
     return;
   }
-  // Evitar doble arranque (duplicaría polígonos y tarjetas).
-  if (window.__mapaArrancado) return;
-  window.__mapaArrancado = true;
-  if (typeof window.__arrancarMapa === "function") window.__arrancarMapa();
+  btnSalir.classList.remove("oculto");
+  document.getElementById("btn-recargar").classList.remove("oculto");
+  mostrarVista("app"); // "cargando…" lo muestra el estado inicial
+  arrancarConOperador(user);
+});
+
+function arrancarConOperador(user) {
+  setEstado("off", "Cargando…");
+  mostrarAviso("Cargando tu cuenta…");
+  restGet("operadores/" + user.uid)
+    .then(function (doc) {
+      var op = camposDoc(doc);
+      // --- suspensión por falta de pago ---
+      var okActivo = op.activo !== false;
+      var lic = op.licenciaHasta ? new Date(op.licenciaHasta) : null;
+      var okLic = !lic || lic.getTime() >= Date.now();
+      if (!okActivo || !okLic) {
+        document.getElementById("bloqueo-detalle").innerHTML =
+          "El acceso a este feedlot está pausado" + (lic && !okLic ? " (licencia vencida el " +
+          lic.toLocaleDateString("es-AR") + ")" : "") +
+          ".<br>Contactá al administrador para reactivarlo.";
+        mostrarVista("bloqueo");
+        return null;
+      }
+      var misFeedlots = op.feedlots || [];
+      return fetch("feedlots.json", { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (reg) {
+        feedlotsReg = reg.feedlots || [];
+        permitidos = feedlotsReg.filter(function (f) {
+          return misFeedlots.indexOf("*") !== -1 || misFeedlots.indexOf(f.id) !== -1;
+        });
+        if (permitidos.length === 0) {
+          document.getElementById("bloqueo-detalle").innerHTML =
+            "Tu cuenta no tiene feedlots asignados.<br>Contactá al administrador.";
+          mostrarVista("bloqueo");
+          return;
+        }
+        // Selector (solo si hay más de uno)
+        selFeedlot.innerHTML = "";
+        if (permitidos.length > 1) {
+          permitidos.forEach(function (f) {
+            var o = document.createElement("option");
+            o.value = f.id; o.textContent = f.nombre;
+            selFeedlot.appendChild(o);
+          });
+          selFeedlot.classList.remove("oculto");
+        } else {
+          selFeedlot.classList.add("oculto");
+        }
+        var pedido = null;
+        try { pedido = new URLSearchParams(location.search).get("feedlot"); } catch (e) {}
+        var elegido = permitidos.filter(function (f) { return f.id === pedido; })[0] || permitidos[0];
+        seleccionarFeedlot(elegido);
+      });
+    })
+    .catch(function (err) {
+      if (String(err && err.message).indexOf("SIN_PERMISO") !== -1) {
+        document.getElementById("bloqueo-detalle").textContent = "Sin permisos para leer tus datos. Contactá al administrador.";
+        mostrarVista("bloqueo");
+      } else {
+        mostrarAviso("No se pudo cargar tu cuenta (" + (err && err.message) + "). Reintentá recargando.");
+        setEstado("off", "Error");
+      }
+    });
 }
-function __falloConfig(motivo) {
-  __avisoConfig("No se pudo cargar config-data.js (" + motivo + "). Reintentando…");
-  setTimeout(function () { __cargarConfig(); }, 15000);
-}
-function __cargarConfig() {
-  var s = document.createElement("script");
-  s.src = __baseUrl() + "config-data.js?v=" + __CONFIG_V;
-  s.onload = __arrancarConConfig;
-  s.onerror = function () { __falloConfig("red/404"); };
-  document.head.appendChild(s);
-}
-__cargarConfig();
-</script>
-<script>
-window.__arrancarMapa = function () {
-  "use strict";
-  var POLL_MS = 60000; // 1 minuto
-  var aviso = document.getElementById("aviso");
-  var elTotal = document.getElementById("total");
-  var elPunto = document.getElementById("punto");
-  var elEstadoCaja = document.getElementById("estado-caja");
-  var elGrilla = document.getElementById("grilla");
-  var elN = document.getElementById("n-corrales");
-  var svg = document.getElementById("mapa");
 
-  function mostrarAviso(msg) {
-    if (!msg) { aviso.classList.remove("visible"); aviso.textContent = ""; return; }
-    aviso.textContent = msg;
-    aviso.classList.add("visible");
-  }
+selFeedlot.addEventListener("change", function () {
+  var f = permitidos.filter(function (x) { return x.id === selFeedlot.value; })[0];
+  if (f) seleccionarFeedlot(f);
+});
 
-  if (typeof FIREBASE_CONFIG === "undefined" || typeof CORRALES === "undefined" || typeof IMG === "undefined") {
-    mostrarAviso("Falta el archivo config-data.js al lado de este index.html.");
-    return;
-  }
-  var PROJECT = FIREBASE_CONFIG.projectId;
-  // Multi-feedlot: ?feedlot=otro-id lee otro feedlot (por defecto la-fortuna).
-  var FEEDLOT = "la-fortuna";
-  try {
-    if (typeof FEEDLOT_ID === "string" && FEEDLOT_ID) FEEDLOT = FEEDLOT_ID;
-    var q = new URLSearchParams(window.location.search).get("feedlot");
-    if (q && /^[a-z0-9-]+$/i.test(q)) FEEDLOT = q.toLowerCase();
-  } catch (e) {}
-  var COLECCION = "feedlots/" + FEEDLOT + "/corrales_estado";
-  try { document.title = "Mapa del Feedlot — " + FEEDLOT; } catch (e) {}
-  try { document.getElementById("sub").textContent = "Conteo en vivo · " + FEEDLOT.toUpperCase(); } catch (e) {}
-
-  // Puntito = estado de comunicación (el detalle va en el tooltip).
-  function setEstado(modo, texto) {
-    elPunto.classList.remove("ok");
-    elPunto.classList.remove("off");
-    if (modo === "ok") elPunto.classList.add("ok");
-    if (modo === "off") elPunto.classList.add("off");
-    elEstadoCaja.setAttribute("title", texto);
-  }
-
-  // ---------- Plano del SVG = píxeles de la foto aérea (igual que la app) ----------
-  var NS = "http://www.w3.org/2000/svg";
-  svg.setAttribute("viewBox", "0 0 " + IMG.w + " " + IMG.h);
-  var foto = document.createElementNS(NS, "image");
-  foto.setAttribute("href", IMG.src);
+function seleccionarFeedlot(f) {
+  feedlotActual = f;
+  try { history.replaceState(null, "", "?feedlot=" + encodeURIComponent(f.id)); } catch (e) {}
+  document.title = "Mapa del Feedlot — " + f.nombre;
+  elSub.textContent = "Conteo en vivo · " + f.nombre;
+  if (selFeedlot.options.length) selFeedlot.value = f.id;
+  // Layout: vista del mapa de este feedlot
+  svg.innerHTML = "";
+  svg.setAttribute("viewBox", "0 0 " + f.img.w + " " + f.img.h);
+  var foto = document.createElementNS("http://www.w3.org/2000/svg", "image");
+  foto.setAttribute("href", f.img.src);
   foto.setAttribute("x", "0");
   foto.setAttribute("y", "0");
-  foto.setAttribute("width", IMG.w);
-  foto.setAttribute("height", IMG.h);
+  foto.setAttribute("width", f.img.w);
+  foto.setAttribute("height", f.img.h);
   svg.appendChild(foto);
-
-  function centroide(pp) {
-    var sx = 0, sy = 0, i;
-    for (i = 0; i < pp.length; i++) { sx += pp[i][0]; sy += pp[i][1]; }
-    return [sx / pp.length, sy / pp.length];
-  }
-
-  // ---------- Dibuja polígonos una vez; etiquetas se actualizan ----------
-  var etiquetas = {}; // nombre -> {num, nombre}
-  CORRALES.forEach(function (c) {
+  dibujarCorrales(f);
+  construirTarjetas(f);
+  mostrarAviso(null);
+  actualizar();
+  if (estadoPoll) clearInterval(estadoPoll);
+  estadoPoll = setInterval(function () { if (!enPausa()) actualizar(); }, POLL_MS);
+}// ---------- Plano: dibuja polígonos una vez; etiquetas se actualizan ----------
+var etiquetas = {};
+function centroide(pp) {
+  var sx = 0, sy = 0, i;
+  for (i = 0; i < pp.length; i++) { sx += pp[i][0]; sy += pp[i][1]; }
+  return [sx / pp.length, sy / pp.length];
+}
+function dibujarCorrales(f) {
+  etiquetas = {};
+  var NS = "http://www.w3.org/2000/svg";
+  (f.corrales || []).forEach(function (c) {
     var pp = c.pts;
-    // Campos solo-etiqueta: sin polígono de fondo, solo la cajita flotante.
-    // Campos con borde: contorno sin relleno (marca el área sin tapar la foto).
     if (!c.soloEtiqueta) {
-    var pts = pp.map(function (q) { return q[0].toFixed(1) + "," + q[1].toFixed(1); }).join(" ");
-    var pol = document.createElementNS(NS, "polygon");
-    pol.setAttribute("points", pts);
-    pol.setAttribute("fill", c.borde ? "none" : "rgba(79,195,247,.20)");
-    pol.setAttribute("stroke", "#4fc3f7");
-    pol.setAttribute("stroke-width", "3");
-    pol.setAttribute("stroke-linejoin", "round");
-    svg.appendChild(pol);
+      var pts = pp.map(function (q) { return q[0].toFixed(1) + "," + q[1].toFixed(1); }).join(" ");
+      var pol = document.createElementNS(NS, "polygon");
+      pol.setAttribute("points", pts);
+      pol.setAttribute("fill", c.borde ? "none" : "rgba(79,195,247,.20)");
+      pol.setAttribute("stroke", "#4fc3f7");
+      pol.setAttribute("stroke-width", "3");
+      pol.setAttribute("stroke-linejoin", "round");
+      svg.appendChild(pol);
     }
-
     var xs = pp.map(function (q) { return q[0]; });
     var ys = pp.map(function (q) { return q[1]; });
     var bw = Math.max(1, Math.max.apply(null, xs) - Math.min.apply(null, xs));
     var bh = Math.max(1, Math.max.apply(null, ys) - Math.min.apply(null, ys));
-    // Solo-etiqueta: tamaño fijo de etiqueta (el punto es solo el centro).
     if (c.soloEtiqueta) { bw = 130; bh = 64; }
-    // Centro explícito (mover etiqueta sin tocar el polígono) o centroide.
     var cen = (c.cx !== undefined && c.cy !== undefined) ? [c.cx, c.cy] : centroide(pp);
-
     var g = document.createElementNS(NS, "g");
     var fondo = document.createElementNS(NS, "rect");
     var tNum = document.createElementNS(NS, "text");
@@ -277,48 +492,51 @@ window.__arrancarMapa = function () {
     svg.appendChild(g);
     etiquetas[c.nombre] = { g: g, fondo: fondo, tNum: tNum, tNom: tNom, cx: cen[0], cy: cen[1], bw: bw, bh: bh };
   });
-
-  function dibujarEtiqueta(e, texto, nombre) {
-    var dig = Math.max(String(texto).length, 2);
-    var fs = Math.min(34, e.bw / (0.62 * dig), e.bh * 0.55);
-    fs = Math.max(10, Math.min(34, fs));
-    var conNombre = e.bw >= 70 && e.bh >= 52;
-    var fsNom = 11;
-    var anchoTxt = Math.max(dig * 0.60 * fs, conNombre ? nombre.length * 0.58 * fsNom : 0);
-    var padH = Math.min(12, Math.max(6, fs * 0.45));
-    var padV = Math.min(7, Math.max(4, fs * 0.28));
-    var w = anchoTxt + padH * 2;
-    var h = fs + (conNombre ? 4 + fsNom : 0) + padV * 2;
-    e.fondo.setAttribute("x", (e.cx - w / 2).toFixed(1));
-    e.fondo.setAttribute("y", (e.cy - h / 2).toFixed(1));
-    e.fondo.setAttribute("width", w.toFixed(1));
-    e.fondo.setAttribute("height", h.toFixed(1));
-    e.fondo.setAttribute("rx", "9");
-    e.fondo.setAttribute("fill", "rgba(0,0,0,.82)");
-    e.fondo.setAttribute("stroke", "#4fc3f7");
-    e.fondo.setAttribute("stroke-width", "1.4");
-    e.tNum.setAttribute("x", e.cx.toFixed(1));
-    e.tNum.setAttribute("y", (e.cy - h / 2 + padV + fs * 0.82).toFixed(1));
-    e.tNum.setAttribute("font-size", fs.toFixed(1));
-    e.tNum.textContent = texto;
-    if (conNombre) {
-      e.tNom.setAttribute("x", e.cx.toFixed(1));
-      e.tNom.setAttribute("y", (e.cy - h / 2 + padV + fs + 4 + fsNom * 0.82).toFixed(1));
-      e.tNom.setAttribute("font-size", fsNom);
-      e.tNom.style.display = "";
-    } else {
-      e.tNom.style.display = "none";
-    }
+}
+function dibujarEtiqueta(e, texto, nombre) {
+  var dig = Math.max(String(texto).length, 2);
+  var fs = Math.min(34, e.bw / (0.62 * dig), e.bh * 0.55);
+  fs = Math.max(10, Math.min(34, fs));
+  var conNombre = e.bw >= 70 && e.bh >= 52;
+  var fsNom = 11;
+  var anchoTxt = Math.max(dig * 0.60 * fs, conNombre ? nombre.length * 0.58 * fsNom : 0);
+  var padH = Math.min(12, Math.max(6, fs * 0.45));
+  var padV = Math.min(7, Math.max(4, fs * 0.28));
+  var w = anchoTxt + padH * 2;
+  var h = fs + (conNombre ? 4 + fsNom : 0) + padV * 2;
+  e.fondo.setAttribute("x", (e.cx - w / 2).toFixed(1));
+  e.fondo.setAttribute("y", (e.cy - h / 2).toFixed(1));
+  e.fondo.setAttribute("width", w.toFixed(1));
+  e.fondo.setAttribute("height", h.toFixed(1));
+  e.fondo.setAttribute("rx", "9");
+  e.fondo.setAttribute("fill", "rgba(0,0,0,.82)");
+  e.fondo.setAttribute("stroke", "#4fc3f7");
+  e.fondo.setAttribute("stroke-width", "1.4");
+  e.tNum.setAttribute("x", e.cx.toFixed(1));
+  e.tNum.setAttribute("y", (e.cy - h / 2 + padV + fs * 0.82).toFixed(1));
+  e.tNum.setAttribute("font-size", fs.toFixed(1));
+  e.tNum.textContent = texto;
+  if (conNombre) {
+    e.tNom.setAttribute("x", e.cx.toFixed(1));
+    e.tNom.setAttribute("y", (e.cy - h / 2 + padV + fs + 4 + fsNom * 0.82).toFixed(1));
+    e.tNom.setAttribute("font-size", fsNom);
+    e.tNom.style.display = "";
+  } else {
+    e.tNom.style.display = "none";
   }
+}
 
-  // ---------- Tarjetas por corral ----------
-  function ordenCorral(a, b) {
-    function num(n) { var m = /(\d+)/.exec(n); return m ? parseInt(m[1], 10) : 1e9; }
-    return num(a.nombre) - num(b.nombre) || (a.nombre < b.nombre ? -1 : 1);
-  }
-  var ordenados = CORRALES.slice().sort(ordenCorral);
+// ---------- Tarjetas ----------
+function ordenCorral(a, b) {
+  function num(n) { var m = /(\d+)/.exec(n); return m ? parseInt(m[1], 10) : 1e9; }
+  return num(a.nombre) - num(b.nombre) || (a.nombre < b.nombre ? -1 : 1);
+}
+var tarjetas = {};
+function construirTarjetas(f) {
+  tarjetas = {};
+  elGrilla.innerHTML = "";
+  var ordenados = (f.corrales || []).slice().sort(ordenCorral);
   elN.textContent = ordenados.length;
-  var tarjetas = {};
   ordenados.forEach(function (c) {
     var d = document.createElement("div");
     d.className = "corral vacio";
@@ -327,133 +545,83 @@ window.__arrancarMapa = function () {
     elGrilla.appendChild(d);
     tarjetas[c.nombre] = d;
   });
+}
 
-  // ---------- Lectura PÚBLICA de Firestore (sin auth ni token) ----------
-  // Las rules permiten leer conteos y backups sin login; la apiKey visible es
-  // pública por diseño y con ella sola no se puede escribir nada.
-  function valorCampo(v) {
-    if (!v) return null;
-    if ("stringValue" in v) return v.stringValue;
-    if ("integerValue" in v) return parseInt(v.integerValue, 10);
-    if ("doubleValue" in v) return v.doubleValue;
-    if ("timestampValue" in v) return v.timestampValue;
-    return null;
-  }
-
-  function leerConteos() {
-    var url = "https://firestore.googleapis.com/v1/projects/" + PROJECT +
-      "/databases/(default)/documents/" + COLECCION + "?pageSize=100";
-    return fetch(url).then(function (r) {
-      if (!r.ok) throw new Error("Firestore HTTP " + r.status);
-      return r.json();
-    }).then(function (j) {
-      var mapa = {};
-      (j.documents || []).forEach(function (d) {
-        var f = d.fields || {};
-        var nombre = valorCampo(f.nombre);
-        var cant = valorCampo(f.cantidadActual);
-        if (!nombre || cant === null || isNaN(cant)) return;
-        mapa[nombre] = {
-          n: cant,
-          origen: valorCampo(f.origen) || "drone",
-          ts: valorCampo(f.ultimaActualizacion)
-        };
-      });
-      return mapa;
+// ---------- Datos en vivo ----------
+var reintentoPendiente = false;
+function leerConteos() {
+  return restGet(COLECCION(feedlotActual.id) + "?pageSize=100").then(function (j) {
+    var mapa = {};
+    (j.documents || []).forEach(function (d) {
+      var f = camposDoc(d);
+      if (!f.nombre || f.cantidadActual == null || isNaN(f.cantidadActual)) return;
+      mapa[f.nombre] = { n: f.cantidadActual, origen: f.origen || "drone", ts: f.ultimaActualizacion };
     });
-  }
-
-  // ---------- Estado + polling ----------
-
-  try {
-    var cache = JSON.parse(localStorage.getItem("vacas_counts") || "null");
-    if (cache && cache.mapa) { renderizar(cache.mapa, true); }
-  } catch (e) {}
-
-  function renderizar(mapa, esCache) {
-    var total = 0, conDatos = 0;
-    ordenados.forEach(function (c) {
-      var dato = mapa[c.nombre];
-      var e = etiquetas[c.nombre];
-      var t = tarjetas[c.nombre];
-      if (dato) {
-        total += dato.n; conDatos++;
-        dibujarEtiqueta(e, String(dato.n), c.nombre);
-        t.classList.remove("vacio");
-        t.querySelector(".n").textContent = dato.n;
-        t.querySelector(".origen").textContent =
-          (dato.origen === "manual" ? "✏️ carga manual" : "🚁 drone") +
-          (dato.ts ? " • " + fechaCorta(dato.ts) : "");
-      } else {
-        dibujarEtiqueta(e, "—", c.nombre);
-        t.classList.add("vacio");
-        t.querySelector(".n").textContent = "—";
-        t.querySelector(".origen").textContent = "sin datos";
-      }
-    });
-    elTotal.textContent = conDatos ? total : "—";
-    elN.textContent = conDatos + "/" + ordenados.length;
-    try { localStorage.setItem("vacas_counts", JSON.stringify({ ts: Date.now(), mapa: mapa })); } catch (e) {}
-  }
-
-  function fechaCorta(iso) {
-    try {
-      var d = new Date(iso);
-      return d.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" }) + " " +
-        d.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" });
-    } catch (e) { return ""; }
-  }
-
-  // Pausa si la pestaña se oculta O la ventana pierde el foco (otra app al frente).
-  var ventanaActiva = true;
-  window.addEventListener("blur", function () {
-    ventanaActiva = false;
-    setEstado("off", "En pausa (ventana en segundo plano)");
+    return mapa;
   });
-  window.addEventListener("focus", function () {
-    if (!ventanaActiva) { ventanaActiva = true; actualizar(); }
-  });
-  function enPausa() { return document.hidden || !ventanaActiva; }
-
-  // Safari iOS informa los cortes de red como "Load failed": el pedido no
-  // llegó a Google (wifi/datos, VPN, bloqueador o relay lo frenaron en el
-  // propio celular). Mensaje accionable + 1 reintento automático.
-  function mensajeAyuda(err) {
-    var m = "" + ((err && err.message) || err);
-    if (/load failed|cancelled|networkerror|failed to fetch|network request failed/i.test(m)) {
-      return "Sin conexión con la nube (" + m + "). Revisá en ESE celular: " +
-        "wifi o datos activados, sin VPN, sin bloqueador de anuncios para esta " +
-        "página, y tocá Refrescar. En iPhone también probá abrir la misma " +
-        "dirección en Chrome.";
+}
+function renderizar(mapa, esCache) {
+  var total = 0, conDatos = 0;
+  (feedlotActual.corrales || []).forEach(function (c) {
+    var dato = mapa[c.nombre];
+    var e = etiquetas[c.nombre];
+    var t = tarjetas[c.nombre];
+    if (!e || !t) return;
+    if (dato) {
+      total += dato.n; conDatos++;
+      dibujarEtiqueta(e, String(dato.n), c.nombre);
+      t.classList.remove("vacio");
+      t.querySelector(".n").textContent = dato.n;
+      t.querySelector(".origen").textContent =
+        (dato.origen === "manual" ? "✏️ carga manual" : "🚁 drone") +
+        (dato.ts ? " • " + fechaCorta(dato.ts) : "");
+    } else {
+      dibujarEtiqueta(e, "—", c.nombre);
+      t.classList.add("vacio");
+      t.querySelector(".n").textContent = "—";
+      t.querySelector(".origen").textContent = "sin datos";
     }
-    return "Sin conexión con la nube (" + m + "). Se muestra el último dato guardado.";
-  }
-
-  var reintentoPendiente = false;
-  function actualizar() {
-    return leerConteos().then(function (mapa) {
-      reintentoPendiente = false;
-      setEstado("ok", "En línea — tocá Refrescar para actualizar");
-      mostrarAviso(null);
-      renderizar(mapa, false);
-    }).catch(function (err) {
-      setEstado("off", "Sin conexión con la nube");
-      mostrarAviso(mensajeAyuda(err));
-      // Un reintento automático por si fue un corte puntual de red.
-      if (!reintentoPendiente) {
-        reintentoPendiente = true;
-        setTimeout(function () { if (!enPausa()) actualizar(); }, 5000);
-      }
-    });
-  }
-  document.getElementById("btn-recargar").addEventListener("click", actualizar);
-  actualizar();
-  // Sin lecturas en pausa (cuida la cuota gratuita); al volver, refresca.
-  setInterval(function () { if (!enPausa()) actualizar(); }, POLL_MS);
-  document.addEventListener("visibilitychange", function () {
-    if (!document.hidden) actualizar();
   });
-};
+  elTotal.textContent = conDatos ? total : "—";
+  elN.textContent = conDatos + "/" + (feedlotActual.corrales || []).length;
+  try { localStorage.setItem("vacas_counts_" + feedlotActual.id, JSON.stringify({ ts: Date.now(), mapa: mapa })); } catch (e) {}
+}
+function fechaCorta(iso) {
+  try {
+    var d = new Date(iso);
+    return d.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" }) + " " +
+      d.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" });
+  } catch (e) { return ""; }
+}
+var ventanaActiva = true;
+window.addEventListener("blur", function () { ventanaActiva = false; setEstado("off", "En pausa (ventana en segundo plano)"); });
+window.addEventListener("focus", function () { if (!ventanaActiva) { ventanaActiva = true; actualizar(); } });
+function enPausa() { return document.hidden || !ventanaActiva; }
+function mensajeAyuda(err) {
+  var m = "" + ((err && err.message) || err);
+  if (/load failed|cancelled|networkerror|failed to fetch|network request failed/i.test(m)) {
+    return "Sin conexión con la nube (" + m + "). Revisá wifi/datos y tocá Refrescar.";
+  }
+  if (/SIN_PERMISO/.test(m)) return "Tu sesión no tiene permisos para ver este feedlot. Volvé a ingresar o avisá al administrador.";
+  return "Sin conexión con la nube (" + m + "). Se muestra el último dato guardado.";
+}
+function actualizar() {
+  if (!feedlotActual) return Promise.resolve();
+  return leerConteos().then(function (mapa) {
+    reintentoPendiente = false;
+    setEstado("ok", "En línea");
+    mostrarAviso(null);
+    renderizar(mapa, false);
+  }).catch(function (err) {
+    setEstado("off", "Sin conexión con la nube");
+    mostrarAviso(mensajeAyuda(err));
+    if (!reintentoPendiente) {
+      reintentoPendiente = true;
+      setTimeout(function () { if (!enPausa()) actualizar(); }, 5000);
+    }
+  });
+}
+document.getElementById("btn-recargar").addEventListener("click", actualizar);
 </script>
 </body>
 </html>
