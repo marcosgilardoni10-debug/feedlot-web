@@ -76,7 +76,18 @@
     font-size: 13px; font-weight: 700;
     cursor: pointer;
   }
-  select.feedlot-sel { max-width: 200px; }
+  select.feedlot-sel {
+    appearance: none;
+    -webkit-appearance: none;
+    background: rgba(255,255,255,.07) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%232dd4bf' stroke-width='2.5' stroke-linecap='round'><path d='m6 9 6 6 6-6'/></svg>") no-repeat right 12px center / 12px 12px;
+    padding-right: 32px;
+    max-width: 200px;
+    border-color: rgba(45,212,191,.35);
+  }
+  select.feedlot-sel:hover { border-color: rgba(45,212,191,.6); }
+  select.feedlot-sel:focus { outline: 2px solid rgba(45,212,191,.4); border-color: var(--acento); }
+  select.feedlot-sel option { background: #131b22; color: var(--texto); padding: 8px 12px; }
+  select.feedlot-sel option:checked { background: rgba(45,212,191,.18); color: var(--acento); font-weight: 800; }
   button.salir { color: var(--gris); }
   .spacer { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   button.recargar:active { transform: scale(.97); }
@@ -331,13 +342,17 @@ function mostrarSelector() {
     var c = document.createElement("div");
     c.className = "feedlot-card";
     c.innerHTML = '<img alt="" loading="lazy"><div class="datos2"><div class="nombre2"></div><div class="meta2"></div></div><button type="button" class="btn2">Entrar</button>';
-    c.querySelector("img").src = f.img.src;
+    c.querySelector("img").src = f.img && f.img.src ? f.img.src : "";
     c.querySelector(".nombre2").textContent = f.nombre;
     c.querySelector(".meta2").textContent = (f.corrales || []).length + " corrales • " + f.id;
     c.querySelector(".btn2").addEventListener("click", function () {
       seleccionarFeedlot(f);
+      mostrarVista("app");
     });
-    c.addEventListener("click", function () { seleccionarFeedlot(f); });
+    c.addEventListener("click", function () {
+      seleccionarFeedlot(f);
+      mostrarVista("app");
+    });
     grillaFeedlots.appendChild(c);
   });
   mostrarVista("selector");
@@ -448,7 +463,24 @@ function arrancarConOperador(user) {
       }
       var misFeedlots = op.feedlots || [];
       return fetch("feedlots.json", { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (reg) {
-        feedlotsReg = reg.feedlots || [];
+        var regPorId = {};
+        (reg.feedlots || []).forEach(function (f) { regPorId[f.id] = f; });
+        // Fusiona catálogo Firestore: un feedlot nuevo en Firebase aparece
+        // acá solo (con foto vacía si todavía no tiene geometría en el JSON).
+        return restGet("feedlots").then(function (j) {
+          (j.documents || []).forEach(function (d) {
+            var id = String(d.name || "").split("/").pop();
+            var nombre = (d.fields && d.fields.nombre && d.fields.nombre.stringValue) || id;
+            if (!regPorId[id]) {
+              regPorId[id] = { id: id, nombre: nombre, img: { w: 0, h: 0, src: "" }, corrales: [] };
+            } else if (!regPorId[id].nombre) {
+              regPorId[id].nombre = nombre;
+            }
+          });
+          feedlotsReg = Object.values(regPorId);
+        }).catch(function () {
+          feedlotsReg = reg.feedlots || [];
+        }).then(function () {
         permitidos = feedlotsReg.filter(function (f) {
           return misFeedlots.indexOf("*") !== -1 || misFeedlots.indexOf(f.id) !== -1;
         });
@@ -484,8 +516,9 @@ function arrancarConOperador(user) {
         if (!elegido) elegido = permitidos[0];
         seleccionarFeedlot(elegido);
       });
-    })
-    .catch(function (err) {
+    });
+  })
+  .catch(function (err) {
       if (String(err && err.message).indexOf("SIN_PERMISO") !== -1) {
         document.getElementById("bloqueo-detalle").textContent = "Sin permisos para leer tus datos. Contactá al administrador.";
         mostrarVista("bloqueo");
