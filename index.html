@@ -67,7 +67,7 @@
   .punto { width: 10px; height: 10px; border-radius: 50%; background: #5a6363; transition: background .3s; }
   .punto.ok { background: var(--acento); box-shadow: 0 0 8px var(--acento); }
   .punto.off { background: var(--amarillo); box-shadow: 0 0 8px var(--amarillo); }
-  button.recargar, select.feedlot-sel, button.salir {
+  button.recargar, .feedlot-sel-btn, button.salir {
     background: rgba(255,255,255,.07);
     color: var(--texto);
     border: 1px solid var(--borde);
@@ -76,18 +76,38 @@
     font-size: 13px; font-weight: 700;
     cursor: pointer;
   }
-  select.feedlot-sel {
-    appearance: none;
-    -webkit-appearance: none;
-    background: rgba(255,255,255,.07) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%232dd4bf' stroke-width='2.5' stroke-linecap='round'><path d='m6 9 6 6 6-6'/></svg>") no-repeat right 12px center / 12px 12px;
+  .feedlot-sel-wrap { position: relative; display: inline-block; }
+  .feedlot-sel-btn {
+    display: flex; align-items: center; gap: 8px;
+    background: #141a1a url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%232dd4bf' stroke-width='2.5' stroke-linecap='round'><path d='m6 9 6 6 6-6'/></svg>") no-repeat right 12px center / 12px 12px;
     padding-right: 32px;
-    max-width: 200px;
+    min-width: 190px;
     border-color: rgba(45,212,191,.35);
   }
-  select.feedlot-sel:hover { border-color: rgba(45,212,191,.6); }
-  select.feedlot-sel:focus { outline: 2px solid rgba(45,212,191,.4); border-color: var(--acento); }
-  select.feedlot-sel option { background: #131b22; color: var(--texto); padding: 8px 12px; }
-  select.feedlot-sel option:checked { background: rgba(45,212,191,.18); color: var(--acento); font-weight: 800; }
+  .feedlot-sel-btn:hover { border-color: rgba(45,212,191,.65); }
+  .feedlot-sel-menu {
+    position: absolute; top: calc(100% + 8px); right: 0;
+    min-width: 100%; max-width: 260px;
+    background: #131b22; border: 1px solid rgba(255,255,255,.12);
+    border-radius: 14px; box-shadow: 0 12px 32px rgba(0,0,0,.55);
+    padding: 8px; z-index: 100;
+  }
+  .feedlot-sel-menu .actual {
+    padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,.08); margin-bottom: 6px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .feedlot-sel-menu .actual .check {
+    width: 26px; height: 26px; border-radius: 8px; background: rgba(45,212,191,.15);
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .feedlot-sel-menu .item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px; border-radius: 10px; cursor: pointer;
+  }
+  .feedlot-sel-menu .item:hover { background: rgba(255,255,255,.05); }
+  .feedlot-sel-menu .item .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--acento); }
+  .feedlot-sel-menu .item .nombre { font-size: 14px; font-weight: 500; color: rgba(255,255,255,.85); }
+  .feedlot-sel-menu .item.activo .nombre { color: var(--acento); font-weight: 800; }
   button.salir { color: var(--gris); }
   .spacer { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   button.recargar:active { transform: scale(.97); }
@@ -232,7 +252,10 @@
       </div>
       <div class="estado" id="estado-caja" title="Conectando…"><span class="punto" id="punto"></span></div>
       <div class="spacer">
-        <select class="feedlot-sel oculto" id="sel-feedlot" aria-label="Elegir feedlot"></select>
+        <div class="feedlot-sel-wrap oculto" id="sel-feedlot-wrap">
+          <button class="feedlot-sel-btn" id="sel-feedlot" type="button" aria-haspopup="menu"><span id="sel-feedlot-txt">El Ombligo</span></button>
+          <div class="feedlot-sel-menu oculto" id="sel-feedlot-menu"></div>
+        </div>
         <button class="recargar oculto" id="btn-cambiar" type="button">Cambiar feedlot</button>
         <button class="recargar oculto" id="btn-recargar" type="button">↻ Refrescar</button>
         <button class="salir oculto" id="btn-salir" type="button">Salir</button>
@@ -310,7 +333,10 @@ var elSelector = document.getElementById("pantalla-selector");
 var elApp = document.getElementById("pantalla-app");
 var elError = document.getElementById("error-login");
 var btnEntrar = document.getElementById("btn-entrar");
+var selFeedlotWrap = document.getElementById("sel-feedlot-wrap");
 var selFeedlot = document.getElementById("sel-feedlot");
+var selFeedlotTxt = document.getElementById("sel-feedlot-txt");
+var selFeedlotMenu = document.getElementById("sel-feedlot-menu");
 var btnCambiar = document.getElementById("btn-cambiar");
 var btnSalir = document.getElementById("btn-salir");
 var btnSalirBloqueo = document.getElementById("btn-salir-bloqueo");
@@ -342,7 +368,7 @@ function mostrarSelector() {
     var c = document.createElement("div");
     c.className = "feedlot-card";
     c.innerHTML = '<img alt="" loading="lazy"><div class="datos2"><div class="nombre2"></div><div class="meta2"></div></div><button type="button" class="btn2">Entrar</button>';
-    c.querySelector("img").src = f.img && f.img.src ? f.img.src : "";
+    c.querySelector("img").src = f.img && f.img.src ? f.img.src : "https://picsum.photos/400/200";
     c.querySelector(".nombre2").textContent = f.nombre;
     c.querySelector(".meta2").textContent = (f.corrales || []).length + " corrales • " + f.id;
     c.querySelector(".btn2").addEventListener("click", function () {
@@ -357,6 +383,43 @@ function mostrarSelector() {
   });
   mostrarVista("selector");
 }
+function construirMenuSelector() {
+  selFeedlotMenu.innerHTML = "";
+  var actual = feedlotActual ? feedlotActual.id : permitidos[0] && permitidos[0].id;
+  var cabecera = document.createElement("div");
+  cabecera.className = "actual";
+  cabecera.innerHTML = '<span class="check">✓</span><span></span>';
+  cabecera.querySelector("span:last-child").textContent = "ACTUAL: " + (feedlotActual ? feedlotActual.nombre : "");
+  cabecera.querySelector("span:last-child").style.color = "var(--acento)";
+  cabecera.querySelector("span:last-child").style.fontWeight = "800";
+  cabecera.style.cursor = "pointer";
+  cabecera.addEventListener("click", function () { selFeedlotMenu.classList.add("oculto"); });
+  selFeedlotMenu.appendChild(cabecera);
+  var divi = document.createElement("div");
+  divi.style.cssText = "height:1px;background:rgba(255,255,255,.08);margin:6px 0";
+  selFeedlotMenu.appendChild(divi);
+  permitidos.forEach(function (f) {
+    var it = document.createElement("div");
+    it.className = "item" + (f.id === actual ? " activo" : "");
+    it.innerHTML = '<span class="dot"></span><span class="nombre"></span>';
+    it.querySelector(".nombre").textContent = f.nombre;
+    it.addEventListener("click", function () {
+      selFeedlotMenu.classList.add("oculto");
+      if (permitidos.length > 0) {
+        var el = permitidos.filter(function (x) { return x.id === f.id; })[0];
+        if (el && el.id !== (feedlotActual && feedlotActual.id)) seleccionarFeedlot(el);
+      }
+    });
+    selFeedlotMenu.appendChild(it);
+  });
+}
+selFeedlot.addEventListener("click", function (e) {
+  e.stopPropagation();
+  selFeedlotMenu.classList.toggle("oculto");
+});
+document.addEventListener("click", function (e) {
+  if (!selFeedlotWrap.contains(e.target)) selFeedlotMenu.classList.add("oculto");
+});
 function mostrarAviso(msg) {
   if (!msg) { aviso.classList.remove("visible"); aviso.textContent = ""; return; }
   aviso.textContent = msg;
@@ -433,7 +496,7 @@ auth.onAuthStateChanged(function (user) {
     btnSalir.classList.add("oculto");
     btnCambiar.classList.add("oculto");
     document.getElementById("btn-recargar").classList.add("oculto");
-    selFeedlot.classList.add("oculto");
+    selFeedlotWrap.classList.add("oculto");
     mostrarVista("login");
     return;
   }
@@ -491,17 +554,11 @@ function arrancarConOperador(user) {
           return;
         }
         // Selector (solo si hay más de uno): en header + pantalla de selección
-        selFeedlot.innerHTML = "";
         if (permitidos.length > 1) {
-          permitidos.forEach(function (f) {
-            var o = document.createElement("option");
-            o.value = f.id; o.textContent = f.nombre;
-            selFeedlot.appendChild(o);
-          });
-          selFeedlot.classList.remove("oculto");
+          selFeedlotWrap.classList.remove("oculto");
           btnCambiar.classList.remove("oculto");
         } else {
-          selFeedlot.classList.add("oculto");
+          selFeedlotWrap.classList.add("oculto");
           btnCambiar.classList.add("oculto");
         }
         var pedido = null;
@@ -531,17 +588,13 @@ function arrancarConOperador(user) {
 
 btnCambiar.addEventListener("click", function () { mostrarSelector(); });
 
-selFeedlot.addEventListener("change", function () {
-  var f = permitidos.filter(function (x) { return x.id === selFeedlot.value; })[0];
-  if (f) seleccionarFeedlot(f);
-});
-
 function seleccionarFeedlot(f) {
   feedlotActual = f;
   try { history.replaceState(null, "", "?feedlot=" + encodeURIComponent(f.id)); } catch (e) {}
   document.title = "Mapa del Feedlot — " + f.nombre;
   elSub.textContent = "Conteo en vivo · " + f.nombre;
-  if (selFeedlot.options.length) selFeedlot.value = f.id;
+  selFeedlotTxt.textContent = f.nombre;
+  construirMenuSelector();
   // Layout: vista del mapa de este feedlot
   svg.innerHTML = "";
   svg.setAttribute("viewBox", "0 0 " + f.img.w + " " + f.img.h);
