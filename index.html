@@ -125,6 +125,25 @@
   .corral.vacio .n { color: var(--gris); font-size: 20px; }
   .pie { text-align: center; color: var(--gris); font-size: 11px; margin-top: 26px; }
 
+  /* ---------- Selector entre login y mapa (admin con >1 feedlot) ---------- */
+  .feedlot-caja { max-width: 760px; margin: 6vh auto 0; }
+  .feedlot-caja h2 { font-size: 20px; color: var(--texto); margin: 0 0 6px; font-weight: 800; letter-spacing: .4px; }
+  .feedlot-caja .sub2 { color: var(--gris); font-size: 13px; margin-bottom: 18px; }
+  .feedlot-grilla { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+  .feedlot-card {
+    background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 16px;
+    overflow: hidden; cursor: pointer; transition: transform .12s, border-color .12s;
+  }
+  .feedlot-card:hover { transform: translateY(-2px); border-color: rgba(45,212,191,.5); }
+  .feedlot-card img { width: 100%; height: 120px; object-fit: cover; display: block; background: #050505; }
+  .feedlot-card .datos2 { padding: 12px 14px; }
+  .feedlot-card .nombre2 { font-size: 15px; font-weight: 800; color: var(--texto); }
+  .feedlot-card .meta2 { font-size: 11px; color: var(--gris); margin-top: 4px; }
+  .feedlot-card .btn2 {
+    margin: 10px 14px 14px; padding: 8px 14px; border: 0; border-radius: 10px;
+    background: rgba(45,212,191,.12); color: var(--acento); font-weight: 800; font-size: 12px; width: calc(100% - 28px);
+  }
+
   /* ---------- Login ---------- */
   .login-caja {
     max-width: 420px; margin: 8vh auto 0;
@@ -203,6 +222,7 @@
       <div class="estado" id="estado-caja" title="Conectando…"><span class="punto" id="punto"></span></div>
       <div class="spacer">
         <select class="feedlot-sel oculto" id="sel-feedlot" aria-label="Elegir feedlot"></select>
+        <button class="recargar oculto" id="btn-cambiar" type="button">Cambiar feedlot</button>
         <button class="recargar oculto" id="btn-recargar" type="button">↻ Refrescar</button>
         <button class="salir oculto" id="btn-salir" type="button">Salir</button>
       </div>
@@ -238,6 +258,15 @@
     </div>
   </section>
 
+  <!-- ===== Selector entre login y mapa (solo si >1 feedlot) ===== -->
+  <section id="pantalla-selector" class="vista oculto">
+    <div class="feedlot-caja">
+      <h2>Elegí tu feedlot</h2>
+      <div class="sub2">Tu cuenta tiene acceso a varios feedlots. Tocá el que querés ver.</div>
+      <div class="feedlot-grilla" id="grilla-feedlots"></div>
+    </div>
+  </section>
+
   <!-- ===== Mapa ===== -->
   <section id="pantalla-app" class="vista oculto">
     <div class="aviso" id="aviso"></div>
@@ -266,10 +295,12 @@ var auth = firebase.auth();
 
 var elLogin = document.getElementById("pantalla-login");
 var elBloqueo = document.getElementById("pantalla-bloqueo");
+var elSelector = document.getElementById("pantalla-selector");
 var elApp = document.getElementById("pantalla-app");
 var elError = document.getElementById("error-login");
 var btnEntrar = document.getElementById("btn-entrar");
 var selFeedlot = document.getElementById("sel-feedlot");
+var btnCambiar = document.getElementById("btn-cambiar");
 var btnSalir = document.getElementById("btn-salir");
 var btnSalirBloqueo = document.getElementById("btn-salir-bloqueo");
 var aviso = document.getElementById("aviso");
@@ -280,6 +311,7 @@ var elGrilla = document.getElementById("grilla");
 var elN = document.getElementById("n-corrales");
 var svg = document.getElementById("mapa");
 var elSub = document.getElementById("sub");
+var grillaFeedlots = document.getElementById("grilla-feedlots");
 
 var feedlotsReg = [];      // registro completo (feedlots.json)
 var permitidos = [];       // feedlots que este usuario puede ver
@@ -287,10 +319,28 @@ var feedlotActual = null;  // objeto del registro en pantalla
 var estadoPoll = null;
 
 function mostrarVista(cual) {
-  [elLogin, elBloqueo, elApp].forEach(function (v) { v.classList.add("oculto"); });
+  [elLogin, elBloqueo, elSelector, elApp].forEach(function (v) { v.classList.add("oculto"); });
   if (cual === "login") elLogin.classList.remove("oculto");
   else if (cual === "bloqueo") elBloqueo.classList.remove("oculto");
+  else if (cual === "selector") elSelector.classList.remove("oculto");
   else elApp.classList.remove("oculto");
+}
+function mostrarSelector() {
+  grillaFeedlots.innerHTML = "";
+  permitidos.forEach(function (f) {
+    var c = document.createElement("div");
+    c.className = "feedlot-card";
+    c.innerHTML = '<img alt="" loading="lazy"><div class="datos2"><div class="nombre2"></div><div class="meta2"></div></div><button type="button" class="btn2">Entrar</button>';
+    c.querySelector("img").src = f.img.src;
+    c.querySelector(".nombre2").textContent = f.nombre;
+    c.querySelector(".meta2").textContent = (f.corrales || []).length + " corrales • " + f.id;
+    c.querySelector(".btn2").addEventListener("click", function () {
+      seleccionarFeedlot(f);
+    });
+    c.addEventListener("click", function () { seleccionarFeedlot(f); });
+    grillaFeedlots.appendChild(c);
+  });
+  mostrarVista("selector");
 }
 function mostrarAviso(msg) {
   if (!msg) { aviso.classList.remove("visible"); aviso.textContent = ""; return; }
@@ -366,6 +416,7 @@ auth.onAuthStateChanged(function (user) {
   if (!user) {
     if (estadoPoll) { clearInterval(estadoPoll); estadoPoll = null; }
     btnSalir.classList.add("oculto");
+    btnCambiar.classList.add("oculto");
     document.getElementById("btn-recargar").classList.add("oculto");
     selFeedlot.classList.add("oculto");
     mostrarVista("login");
@@ -407,7 +458,7 @@ function arrancarConOperador(user) {
           mostrarVista("bloqueo");
           return;
         }
-        // Selector (solo si hay más de uno)
+        // Selector (solo si hay más de uno): en header + pantalla de selección
         selFeedlot.innerHTML = "";
         if (permitidos.length > 1) {
           permitidos.forEach(function (f) {
@@ -416,12 +467,21 @@ function arrancarConOperador(user) {
             selFeedlot.appendChild(o);
           });
           selFeedlot.classList.remove("oculto");
+          btnCambiar.classList.remove("oculto");
         } else {
           selFeedlot.classList.add("oculto");
+          btnCambiar.classList.add("oculto");
         }
         var pedido = null;
         try { pedido = new URLSearchParams(location.search).get("feedlot"); } catch (e) {}
-        var elegido = permitidos.filter(function (f) { return f.id === pedido; })[0] || permitidos[0];
+        var elegido = permitidos.filter(function (f) { return f.id === pedido; })[0];
+        // Si hay >1, arrancar en el selector (entre login y el mapa).
+        // Si solo 1, directo al mapa.
+        if (permitidos.length > 1 && !elegido) {
+          mostrarSelector();
+          return;
+        }
+        if (!elegido) elegido = permitidos[0];
         seleccionarFeedlot(elegido);
       });
     })
@@ -435,6 +495,8 @@ function arrancarConOperador(user) {
       }
     });
 }
+
+btnCambiar.addEventListener("click", function () { mostrarSelector(); });
 
 selFeedlot.addEventListener("change", function () {
   var f = permitidos.filter(function (x) { return x.id === selFeedlot.value; })[0];

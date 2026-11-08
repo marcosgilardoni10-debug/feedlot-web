@@ -1,0 +1,22 @@
+{
+  "hosting": {
+    "target": "feedlot",
+    "public": ".",
+    "ignore": [
+      "firebase.json",
+      ".firebaserc",
+      "README.md",
+      ".git/**"
+    ],
+    "headers": [
+      {
+        "source": "**/*.jpg",
+        "headers": [{ "key": "Cache-Control", "value": "public, max-age=3600" }]
+      },
+      {
+        "source": "**/feedlots.json",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }]
+      }
+    ]
+  }
+}
